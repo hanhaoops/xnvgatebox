@@ -1,6 +1,6 @@
 # VPN Gate 家宽出口工具箱分阶段开发文档
 
-修订日期：2026 年 10 月 8 日。范围：v0.1～v1.0；实现进度见 [ROUND1.md](ROUND1.md)。
+修订日期：2026 年 10 月 9 日。范围：v0.1～v1.0；实现进度见 [ROUND1.md](ROUND1.md)。
 
 开发基准：用户确认的 `DEVELOPMENT_revised.md`。后续实现按本文的部署形态、阶段顺序与验收条件执行。
 
@@ -8,7 +8,7 @@
 
 项目提供三种部署形态：**Serverless / No VPS、VPS Standalone、Hybrid**。所谓“统一节点池”首先是统一的数据模型、抓取器、分类器和验证语义，**不等于必须依赖一个中心化 GitHub 远程池**。Mode A 默认由 GitHub Actions 构建池并供 Cloudflare 使用；Mode B 既可以消费远程池，也可以在 VPS 本机运行同一套 Pool Builder 生成本地池，从而做到只用一台 VPS 也能独立工作。Hybrid 则使用远程池做初筛、VPS 本机完成最终 OpenVPN/Slot 验活。
 
-统一池保存节点事实、协议能力、出口画像和验证证据；不同运行环境自行完成最终链路验证。Mode B 不要求先在 GitHub Actions 完成一次 B Full Chain，再到目标 VPS 重测。参考项目的源码与许可证结论保留在 [REFERENCE_AUDIT.md](REFERENCE_AUDIT.md)。以下为拟实现方案，不代表链路已实测成功。
+统一池保存节点事实、协议能力、出口画像和验证证据；不同运行环境自行完成最终链路验证。Mode B 不要求先在 GitHub Actions 完成一次 B Full Chain，再到目标 VPS 重测。Cloudflare 的核心管理和订阅能力由本项目自己的 Worker/Pages 适配层提供；EdgeTunnel 只保留为可选的外部兼容接口，不成为核心运行依赖。参考项目的源码与许可证结论保留在 [REFERENCE_AUDIT.md](REFERENCE_AUDIT.md)。以下为拟实现方案，不代表链路已实测成功。
 
 ## 1 开发顺序与三个里程碑
 
@@ -58,6 +58,34 @@ Mode B：VPS选择候选 → 本机OpenVPN/SOCKS最终验活 → Slot healthy
 | Hybrid | Linux VPS + 可选 GitHub/Cloudflare | 远程池初筛 + 本机补测 | VPS 本机 | 减少 VPS 抓取/分类成本，同时保留本机真实性 |
 
 三个 Profile 共用 `models / source parser / classifier / selection policy / exit comparison`。统一的含义是“逻辑和数据契约统一”，不是强制所有部署连接同一个中心服务。任何 Profile 都不得因为远程池不可用而偷偷切换为另一套未经验证的来源；VPS Standalone 应显式配置为本地 Pool Builder。
+
+## 2.2 Cloudflare 管理层与可选 EdgeTunnel 接口
+
+Mode A 的正式链路由三个独立职责组成：GitHub Actions 生成并验证节点池；Cloudflare 存储当前版本的短期 manifest；本项目 Worker 提供管理页、状态页、订阅接口和 VLESS/SSTP 入口。GitHub Actions 不承载用户代理流量，Cloudflare 也不能把未验证的 GitHub IP/端口直接当成 VPN Gate 出口。
+
+```text
+GitHub Actions
+  → validated_nodes.json（带版本、生成时间、expires_at）
+  → Cloudflare KV / 受保护发布 API
+  → VPN Gate Box Worker
+       /admin   管理与状态
+       /sub     带 token 的 VLESS 订阅
+       /        只接受受控的 VPN Gate SSTP 参数
+```
+
+Worker 的 VLESS 链接必须由当前 manifest 派生，不能接受任意 `proxyip`、任意 SOCKS5 地址或任意目标主机。只允许 manifest 中仍然有效的 VPN Gate 节点，并在发布前后保留 `expected_exit_ip == actual_exit_ip` 证据。管理接口使用单独的管理员口令或 Cloudflare Access；订阅 token 只能读取当前有效版本，manifest 过期或为空时返回非 200，避免客户端被空订阅清空。
+
+EdgeTunnel 适配器只输出兼容的节点/订阅格式或调用独立的导入接口，不把它的 Worker 源码复制到本项目。EdgeTunnel 被选用时单独部署、单独绑定 KV、单独履行 GPL v2 义务；本项目自己的 Worker 仍然可以在没有 EdgeTunnel 的情况下直接提供 CF 管理页和订阅。
+
+Cloudflare 里程碑重新定义为：
+
+| 阶段 | 工作 | 验收 |
+| --- | --- | --- |
+| CF-1 | manifest schema、版本/过期和原子发布 | Actions 能将新鲜验证结果发布到 CF 存储，旧版本不会半写入 |
+| CF-2 | 自有 Worker 管理页、`/status`、受保护 `/sub` | 不部署 EdgeTunnel 也能得到可导入订阅 |
+| CF-3 | Worker VLESS/SSTP 入口接入 manifest | 每条发布链接重新验证 expected/actual，失效节点不再发布 |
+| CF-4 | GitHub Actions 定时刷新与回滚 | 30/60 分钟刷新，发布失败保留上一份未过期版本并报警 |
+| CF-5 | 可选 EdgeTunnel 导入适配 | EdgeTunnel 只作为外部 UI/格式消费者，不成为主链路依赖 |
 
 ## 3 最小 Node 与 Exit Slot 模型
 
@@ -117,12 +145,12 @@ Slot 默认可显式允许 strict 与 likely，两者分别计数和展示；只
 
 ## 5 v0.1 无 VPS 最小闭环
 
-沿用三个参考项目的职责分工：gate 的抓取组织思路、CheckSocks5 的实际 SSTP检测、CF-vpngate 的 Xray 最终测试思路。先对接用户部署的 Checker 与 EdgeTunnel，写最小适配脚本；不先重写整套 Gateway、单独 Subscription Worker 或共享协议包。
+沿用三个参考项目的职责分工：gate 的抓取组织思路、CheckSocks5 的实际 SSTP检测、CF-vpngate 的 Xray 最终测试思路。优先使用本项目自有的 Checker/Edge Worker 适配层；EdgeTunnel 只通过独立接口兼容，不作为必须部署的 Gateway，也不先复制其 Worker 源码。
 
 1. 唯一抓取器解析 VPN Gate CSV、OpenVPN配置，生成 SSTP候选；TCP入口只是候选，需要真握手。
 2. Checker 完成 SSTP → PPP → IPCP → 隧道内 TCP/HTTP，记录预期公网出口；PPP内部地址、server_ip 不能当出口。
 3. 按该 IP 获取 ASN/ISP/国家与分类，加入共享池的协议证据。
-4. 生成实际要发布的 VLESS/WS 配置，强制经过 SSTP；按选用 EdgeTunnel 版本确定参数，不把 `global=1` 当通用标准。
+4. 生成实际要发布的 VLESS/WS 配置，强制经过本项目 Edge Worker 的 SSTP 适配；可选 EdgeTunnel 只消费兼容格式，不把 `global=1` 当通用标准。
 5. Actions 启动临时 Xray SOCKS 入站，通过 `socks5h` 请求两个独立 HTTPS IP Echo，校验证书与合法 IP；两者都必须等于 expected_exit_ip。再校验一个小体积 HTTPS 内容请求。
 6. 检测用的就是发布用的配置，不只在测试时添加全局代理参数；出口不同、握手失败或响应异常就不发布。
 7. 输出基础 `node_pool.json`、Mode A 通过最终链路的 `mode_a_validated.json`、`residential.json`（保留 strict/likely 等级）、`nodes.txt`、受保护的 `subscription.txt` 和简短检测报告；无需 WebUI 即可演示。`node_pool.json` 不能与“已通过最终 VLESS 验活”的列表混为一谈。
@@ -209,7 +237,7 @@ Exit Slots：Name、目标国家、Current/Expected Exit IP、ASN、ISP、SOCKS 
 ```text
 src/        vpngate.py / models.py / pool.py / classifier.py / checker.py / subscription.py
 scripts/    full_chain_check.py
-worker/     checker-adapter / edgetunnel-adapter
+worker/     checker-adapter / vpngate-edge / optional-edgetunnel-adapter
 vps/        fanout-based manager / netns / socks / health / exporter
 data/       node_pool.json / mode_a_validated.json / residential.json
 runtime/    slots.json / slot_health.json / private-subscription.txt（忽略提交）
@@ -235,4 +263,4 @@ Actions先手动成功，再加30/60分钟schedule：候选上限50、SSTP并发
 
 保留既有许可边界：fanout MIT可复用并保留声明；CheckSocks5按GPL v3条件处理；gate与CF-vpngate无明确许可时仅参考；AimiliVPN暂仅功能参考。EdgeTunnel独立部署对接，不将许可兼容性未确认的Worker源码混成一份。许可记录不能用“组合项目”代替。
 
-后续开发的第一个任务是 v0.1：运行一条真实 VLESS 链路，记录第一阶段 expected、最终 actual 与强制出口失败测试，再扩展候选数量与其他版本功能。v0.1 已在本机和 GitHub Actions 完成；v0.2 现用保留许可声明的 Multi-Exit 底座读取同一 `node_pool.json`，并已在一台小规格 Debian VPS 上完成一个固定 Slot 的真实验收（包括掉线失败、kill-switch 和自动恢复），证据见 [`VPS_DEPLOYMENT.md`](VPS_DEPLOYMENT.md)。后续再扩展远程池、策略、多 Slot 和 WebUI；这样可以分别证明“无 VPS”和“只有一台 VPS”两种模式都能独立成立。
+v0.1 已在本机和 GitHub Actions 完成；v0.2 现用保留许可声明的 Multi-Exit 底座读取同一 `node_pool.json`，并已在一台小规格 Debian VPS 上完成一个固定 Slot 的真实验收（包括掉线失败、kill-switch 和自动恢复），证据见 [`VPS_DEPLOYMENT.md`](VPS_DEPLOYMENT.md)。后续按 CF-1～CF-5 完成 Cloudflare 自有管理/订阅层，再扩展 VPS 多 Slot 和统一订阅；EdgeTunnel 只作为可选兼容路径。
