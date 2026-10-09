@@ -254,7 +254,7 @@ const loginHTML = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>fanout</title>
+<title>VPN Gate Box</title>
 <style>
 body{margin:0;height:100vh;display:flex;flex-direction:column;gap:16px;
   align-items:center;justify-content:center;
@@ -277,17 +277,15 @@ button{width:100%;margin-top:14px;background:#4a9eda;border:0;color:#0b0e12;
 </head>
 <body>
 <form id="f">
-  <h1>fanout</h1>
+  <h1>VPN Gate Box</h1>
   <label for="pw">访问口令</label>
   <input type="password" id="pw" autofocus autocomplete="current-password">
   <button type="submit">进入</button>
   <div class="err" id="err"></div>
 </form>
 <div class="links">
-  <a href="https://t.me/+ft-zI76oovgwNmRh" target="_blank" rel="noopener">交流群</a>
-  <a href="https://youtube.com/@joeyblog" target="_blank" rel="noopener">油管</a>
-  <a href="https://joeyblog.net" target="_blank" rel="noopener">博客</a>
-  <a href="https://github.com/byJoey/fanout" target="_blank" rel="noopener">GitHub</a>
+  <a href="https://github.com/hanhaoops/xnvgatebox" target="_blank" rel="noopener">项目 GitHub</a>
+  <a href="https://github.com/hanhaoops/xnvgatebox/blob/main/vps/README.md" target="_blank" rel="noopener">使用说明</a>
 </div>
 <script>
 document.getElementById('f').onsubmit = async e => {

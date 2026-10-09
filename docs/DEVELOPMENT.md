@@ -133,7 +133,7 @@ v0.1 必测：使用无效 SSTP入口访问 Worker 可直接访问的网站，�
 
 ## 6 v0.2～v0.3 VPS 固定多出口
 
-尽量复用 MIT fanout 的 host SOCKS → 对应 netns → OpenVPN → VPN Gate 路线。**优先把 fanout 当作 Mode B 的可运行底座，而不是重新实现一个同功能的 Multi-Exit 引擎。** 第一阶段只改它的节点来源接口，使其既能读取远程池，也能读取 VPS Standalone 本机 Pool Builder 的结果；监听改为 loopback，端口与 tag 由 Slot 固定配置。保留并验证其 namespace 线程恢复、健康检查和母机保护；只有现有实现无法满足“断线绝不回落母机”时再做最小补丁，不提前引入 Unix IPC、namespace agent、cgroup 或复杂 root-helper。
+Multi-Exit 使用 host SOCKS → 对应 netns → OpenVPN → VPN Gate 路线。实现借鉴过 MIT 许可的外部参考项目，但产品代码以 VPN Gate 的统一节点池、Slot 模型和本项目的安全验收为准，不建立第二套抓取器。第一阶段只改节点来源接口，使其既能读取远程池，也能读取 VPS Standalone 本机 Pool Builder 的结果；监听改为 loopback，端口与 tag 由 Slot 固定配置。保留并验证 namespace 线程恢复、健康检查和母机保护；只有现有实现无法满足“断线绝不回落母机”时再做最小补丁，不提前引入 Unix IPC、namespace agent、cgroup 或复杂 root-helper。
 
 ```text
 Xray → 127.0.0.1:17928 → host SOCKS → vg-us-01 / tun120 → VPN Gate US
@@ -235,4 +235,4 @@ Actions先手动成功，再加30/60分钟schedule：候选上限50、SSTP并发
 
 保留既有许可边界：fanout MIT可复用并保留声明；CheckSocks5按GPL v3条件处理；gate与CF-vpngate无明确许可时仅参考；AimiliVPN暂仅功能参考。EdgeTunnel独立部署对接，不将许可兼容性未确认的Worker源码混成一份。许可记录不能用“组合项目”代替。
 
-后续开发的第一个任务是 v0.1：运行一条真实 VLESS 链路，记录第一阶段 expected、最终 actual 与强制出口失败测试，再扩展候选数量与其他版本功能。v0.1 已在本机和 GitHub Actions 完成；v0.2 现用保留 MIT 许可的 fanout 底座读取同一 `node_pool.json`，并已在一台小规格 Debian VPS 上完成一个固定 Slot 的真实验收（包括掉线失败、kill-switch 和自动恢复），证据见 [`VPS_DEPLOYMENT.md`](VPS_DEPLOYMENT.md)。后续再扩展远程池、策略、多 Slot 和 WebUI；这样可以分别证明“无 VPS”和“只有一台 VPS”两种模式都能独立成立。
+后续开发的第一个任务是 v0.1：运行一条真实 VLESS 链路，记录第一阶段 expected、最终 actual 与强制出口失败测试，再扩展候选数量与其他版本功能。v0.1 已在本机和 GitHub Actions 完成；v0.2 现用保留许可声明的 Multi-Exit 底座读取同一 `node_pool.json`，并已在一台小规格 Debian VPS 上完成一个固定 Slot 的真实验收（包括掉线失败、kill-switch 和自动恢复），证据见 [`VPS_DEPLOYMENT.md`](VPS_DEPLOYMENT.md)。后续再扩展远程池、策略、多 Slot 和 WebUI；这样可以分别证明“无 VPS”和“只有一台 VPS”两种模式都能独立成立。

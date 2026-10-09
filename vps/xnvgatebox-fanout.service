@@ -1,5 +1,5 @@
 [Unit]
-Description=xnvgatebox VPS Multi-Exit fanout
+Description=VPN Gate Box VPS Multi-Exit
 After=network-online.target x-ui.service
 Wants=network-online.target
 

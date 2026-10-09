@@ -365,6 +365,46 @@ func (m *Manager) Swap(slot int) error {
 	return nil
 }
 
+// SwapTo replaces a running Slot with a user-selected node from the shared
+// validated pool.  The country is kept stable so a manual choice cannot
+// silently violate the Slot's current policy.
+func (m *Manager) SwapTo(slot int, host string) error {
+	m.mu.RLock()
+	t, ok := m.tunnels[slot]
+	var node Node
+	for _, candidate := range m.nodes {
+		if candidate.HostName == host {
+			node = candidate
+			break
+		}
+	}
+	m.mu.RUnlock()
+	if !ok {
+		return fmt.Errorf("槽位 %d 没有运行中的隧道", slot)
+	}
+	if node.HostName == "" {
+		return fmt.Errorf("节点不存在，可能节点池已刷新")
+	}
+	if t.Status == "starting" {
+		return fmt.Errorf("这个出口正在连接中，稍等一下")
+	}
+	if t.Node.CountryCode != "" && node.CountryCode != "" && t.Node.CountryCode != node.CountryCode {
+		return fmt.Errorf("手动换节点必须保持国家不变（当前 %s，目标 %s）", t.Node.CountryCode, node.CountryCode)
+	}
+	if m.nodeInUse(node.HostName, slot) {
+		return fmt.Errorf("节点已被其他出口占用")
+	}
+	oldHost := t.Node.HostName
+	if oldHost == node.HostName {
+		return fmt.Errorf("这个节点已经是当前出口")
+	}
+	t.rememberSwap(oldHost)
+	t.rememberSwap(node.HostName)
+	t.Node = node
+	m.reconnect(t, oldHost)
+	return nil
+}
+
 // pickSwapTarget 给"换节点"挑下一个目标，并把该跳过的节点记进历史。
 //
 // 记两个：换下来的那个，以及刚挑中的这个。挑中的也记是因为真机上踩到过——

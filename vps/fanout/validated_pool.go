@@ -29,17 +29,24 @@ type validatedPoolNode struct {
 	SourcePingMS      int     `json:"source_ping_ms"`
 	Protocols         struct {
 		OpenVPN struct {
-			Status     string `json:"status"`
-			ProfileRef string `json:"profile_ref"`
+			Status         string `json:"status"`
+			ProfileRef     string `json:"profile_ref"`
+			ExpectedExitIP string `json:"expected_exit_ip"`
 		} `json:"openvpn"`
 		SSTP struct {
-			Egress struct {
+			Status         string `json:"status"`
+			ExpectedExitIP string `json:"expected_exit_ip"`
+			Egress         struct {
 				IPType string `json:"ip_type"`
 				ISP    string `json:"isp"`
 				ASN    string `json:"asn"`
 			} `json:"egress"`
 		} `json:"sstp"`
 	} `json:"protocols"`
+	ModeA struct {
+		Status     string `json:"status"`
+		VerifiedAt string `json:"verified_at"`
+	} `json:"mode_a"`
 }
 
 func fetchNodesFromValidatedPool(poolPath string) ([]Node, error) {
@@ -81,18 +88,23 @@ func fetchNodesFromValidatedPool(poolPath string) ([]Node, error) {
 		// configured intelligence provider can later mark strict/likely nodes.
 		residential := ipType == "strict_residential" || ipType == "likely_residential" || ipType == "residential"
 		nodes = append(nodes, Node{
-			HostName:    item.Hostname,
-			IP:          item.ServerIP,
-			Country:     item.AdvertisedCountry,
-			CountryCode: item.AdvertisedCountry,
-			Ping:        item.SourcePingMS,
-			SpeedMbps:   item.SourceScore,
-			Residential: residential,
-			Config:      string(config),
-			PoolNodeID:  item.NodeID,
-			IPType:      ipType,
-			ISP:         item.Protocols.SSTP.Egress.ISP,
-			ASN:         item.Protocols.SSTP.Egress.ASN,
+			HostName:          item.Hostname,
+			IP:                item.ServerIP,
+			Country:           item.AdvertisedCountry,
+			CountryCode:       item.AdvertisedCountry,
+			Ping:              item.SourcePingMS,
+			SpeedMbps:         item.SourceScore,
+			Residential:       residential,
+			Config:            string(config),
+			PoolNodeID:        item.NodeID,
+			IPType:            ipType,
+			ISP:               item.Protocols.SSTP.Egress.ISP,
+			ASN:               item.Protocols.SSTP.Egress.ASN,
+			ExpectedExitIP:    firstNonEmpty(item.Protocols.OpenVPN.ExpectedExitIP, item.Protocols.SSTP.ExpectedExitIP),
+			SSTPStatus:        item.Protocols.SSTP.Status,
+			OpenVPNStatus:     item.Protocols.OpenVPN.Status,
+			FullChainVerified: item.ModeA.Status == "passed",
+			LastVerified:      item.ModeA.VerifiedAt,
 		})
 	}
 	if len(nodes) == 0 {
@@ -114,6 +126,15 @@ func fetchNodesFromValidatedPool(poolPath string) ([]Node, error) {
 		return nodes[i].SpeedMbps > nodes[j].SpeedMbps
 	})
 	return nodes, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func withinDir(base, path string) bool {

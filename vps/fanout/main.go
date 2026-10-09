@@ -117,6 +117,7 @@ func main() {
 	mux.HandleFunc("/api/start", apiStart(mgr))
 	mux.HandleFunc("/api/stop", apiStop(mgr))
 	mux.HandleFunc("/api/swap", apiSwap(mgr))
+	mux.HandleFunc("/api/replace", apiReplace(mgr))
 	mux.HandleFunc("/api/cred", apiCred(mgr))
 	mux.HandleFunc("/api/refresh", apiRefresh(mgr))
 	mux.HandleFunc("/api/regions", apiRegions(mgr))
@@ -290,6 +291,26 @@ func apiSwap(m *Manager) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"ok": "正在换节点"})
+	}
+}
+
+func apiReplace(m *Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		slot, err := strconv.Atoi(r.URL.Query().Get("slot"))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "slot 参数无效"})
+			return
+		}
+		host := strings.TrimSpace(r.URL.Query().Get("host"))
+		if host == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "缺少 host 参数"})
+			return
+		}
+		if err := m.SwapTo(slot, host); err != nil {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"ok": "正在切换到指定节点"})
 	}
 }
 

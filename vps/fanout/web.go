@@ -16,7 +16,7 @@ const indexHTML = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>fanout</title>
+<title>VPN Gate Box</title>
 <style>
 :root{
   --bg:#12151a; --panel:#181c23; --line:#262c36; --text:#dde3ec;
@@ -82,6 +82,26 @@ main{padding:14px 16px 40px;max-width:1180px;margin:0 auto}
 .empty{border:1px dashed var(--line);border-radius:6px;padding:40px 20px;
   text-align:center;color:var(--dim)}
 .empty button{margin-top:14px}
+.nodescard{border:1px solid var(--line);border-radius:6px;background:var(--panel);
+  margin-bottom:16px;overflow:hidden}
+.nodeshead{display:flex;align-items:center;gap:10px;padding:10px 12px;
+  border-bottom:1px solid var(--line)}
+.nodeshead h2{font-size:12px;margin:0;font-weight:600;color:var(--text)}
+.nodetable{width:100%;border-collapse:collapse;font-size:11px}
+.nodetable th{padding:7px 10px;text-align:left;color:var(--dim);font-weight:500;
+  border-bottom:1px solid var(--line);white-space:nowrap}
+.nodetable td{padding:8px 10px;border-bottom:1px solid rgba(38,44,54,.65);
+  vertical-align:middle;white-space:nowrap}
+.nodetable tr:last-child td{border-bottom:0}
+.nodetable .host{max-width:230px;overflow:hidden;text-overflow:ellipsis}
+.nodetable .muted{color:var(--dim)}
+.badge{display:inline-block;border:1px solid var(--line);border-radius:3px;
+  padding:1px 6px;color:var(--dim)}
+.badge.ok{color:var(--ok);border-color:rgba(63,166,107,.35)}
+.badge.bad{color:var(--bad);border-color:rgba(194,84,80,.35)}
+.badge.warn{color:var(--warn);border-color:rgba(201,144,58,.35)}
+.nodeaction{padding:3px 7px;font-size:11px}
+@media(max-width:900px){.nodetable{display:block;overflow-x:auto}.nodetable th,.nodetable td{padding:7px 8px}}
 .jobs{margin-bottom:12px}
 .job{border:1px solid var(--line);border-radius:6px;background:var(--panel);
   padding:10px 12px;margin-bottom:8px}
@@ -193,25 +213,33 @@ textarea:focus{outline:none;border-color:var(--accent)}
 </head>
 <body>
 <header>
-  <h1>fanout</h1>
+  <h1>VPN Gate Box</h1>
   <span class="count" id="panel"></span>
   <span class="spacer"></span>
   <button class="icon" id="settingsBtn" title="设置">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
   </button>
   <nav class="links">
-    <a href="https://t.me/+ft-zI76oovgwNmRh" target="_blank" rel="noopener">交流群</a>
-    <a href="https://youtube.com/@joeyblog" target="_blank" rel="noopener">油管</a>
-    <a href="https://joeyblog.net" target="_blank" rel="noopener">博客</a>
-    <a href="https://github.com/byJoey/fanout" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://github.com/hanhaoops/xnvgatebox" target="_blank" rel="noopener">项目 GitHub</a>
+    <a href="https://github.com/hanhaoops/xnvgatebox/blob/main/vps/README.md" target="_blank" rel="noopener">使用说明</a>
   </nav>
 </header>
 
 <main>
+  <section class="nodescard">
+    <div class="nodeshead">
+      <h2>Validated Nodes</h2>
+      <span class="count" id="nodecount">读取中…</span>
+      <span class="spacer"></span>
+      <button id="refreshNodes" title="重新读取共享节点池">刷新节点池</button>
+    </div>
+    <div id="validatedNodes"><div class="empty">正在读取共享节点池…</div></div>
+  </section>
+
   <div class="jobs" id="jobs"></div>
 
   <div class="bar">
-    <h2>出口</h2>
+    <h2>Exit Slots</h2>
     <span class="count" id="ecount"></span>
     <span class="spacer"></span>
     <button id="subBtn" title="拿订阅地址">
@@ -436,7 +464,7 @@ textarea:focus{outline:none;border-color:var(--accent)}
 <div class="modal" id="subbox">
   <div class="sheet">
     <div class="head">
-      <h2>订阅</h2>
+      <h2>订阅管理</h2>
       <span class="count" id="subcount"></span>
       <span class="spacer"></span>
       <button class="icon" data-close="subbox" title="关闭">
@@ -447,6 +475,7 @@ textarea:focus{outline:none;border-color:var(--accent)}
       <label class="f"><span>订阅地址</span>
         <input id="suburl" type="text" spellcheck="false" readonly></label>
       <div class="hint">客户端里新建订阅填这条。以后加出口、删出口都会自己跟上，不用重新配。</div>
+      <div class="hint" id="sublistenhint">订阅地址必须能从客户端访问；如果管理界面只监听 127.0.0.1，请先通过 HTTPS 反向代理公开订阅接口，或使用 SSH 隧道。</div>
       <div class="hint bad">地址最后那串口令等于密码，别发群里。</div>
       <div class="hint">想看明文而不是 base64，地址后面加 <code>&amp;target=links</code>。</div>
     </div>
@@ -573,16 +602,78 @@ async function copy(text){
 
 let view = {exits:[], direct:[], panel:'', backend:'', public_ip:''};
 let inbounds = [];
+let validatedNodes = [];
+let lastNodesLoad = 0;
 
-// 自建模式下入站由 fanout 自己管，界面要提供新建入口；
+// 自建模式下入站由本服务自己管，界面要提供新建入口；
 // 接管 3x-ui 时入站归面板管，这里只读不写。
 function isNative(){ return view.backend === 'native'; }
-// xray-cf-lite 模式下节点归它管，fanout 只改路由，界面不给新建入口
+// xray-cf-lite 模式下节点归它管，本服务只改路由，界面不给新建入口
 function isXCL(){ return view.backend === 'xray-cf-lite'; }
 const BACKEND_NAME = {'native':'自建 Xray', '3x-ui':'3x-ui', 'xray-cf-lite':'xray-cf-lite'};
 function backendName(){ return BACKEND_NAME[view.backend] || '3x-ui'; }
 
 const STATUS = {up:'已连通', starting:'连接中', failed:'失败', stopped:'已停止'};
+
+function nodeStatus(value){
+  const s = String(value || 'unknown').toLowerCase();
+  if(s === 'passed' || s === 'up' || s === 'healthy') return '<span class="badge ok">通过</span>';
+  if(s === 'failed' || s === 'down') return '<span class="badge bad">失败</span>';
+  if(s === 'not_tested' || s === 'starting') return '<span class="badge warn">未测</span>';
+  return '<span class="badge">未知</span>';
+}
+
+function nodeAction(n){
+  const same = view.exits.find(e => e.status !== 'stopped' && e.region === n.country_code);
+  if(same){
+    if(same.host === n.hostname) return '<span class="badge ok">当前节点</span>';
+    return '<button class="nodeaction" data-node-replace="' + esc(n.hostname)
+      + '" data-slot="' + same.slot + '">换到此节点</button>';
+  }
+  if(view.exits.length) return '<span class="muted">需空闲 Slot</span>';
+  return '<button class="nodeaction" data-node-start="' + esc(n.hostname) + '">启动 Slot</button>';
+}
+
+function renderValidatedNodes(){
+  const box = $('#validatedNodes');
+  const list = validatedNodes || [];
+  $('#nodecount').textContent = list.length ? list.length + ' 个节点' : '暂无节点';
+  if(!list.length){
+    box.innerHTML = '<div class="empty">共享节点池暂无可展示节点</div>';
+    return;
+  }
+  box.innerHTML = '<table class="nodetable"><thead><tr>'
+    + '<th>国家</th><th>出口 IP</th><th>ASN</th><th>ISP</th><th>类型</th>'
+    + '<th>延迟</th><th>SSTP</th><th>OpenVPN</th><th>Mode A Full Chain</th><th>Last Verified</th><th>操作</th>'
+    + '</tr></thead><tbody>'
+    + list.map(n => '<tr title="' + esc(n.hostname || '') + '">'
+      + '<td>' + esc(n.country || n.country_code || '—') + '</td>'
+      + '<td>' + esc(n.expected_exit_ip || n.ip || '—') + '</td>'
+      + '<td class="muted">' + esc(n.asn || 'unknown') + '</td>'
+      + '<td class="muted host">' + esc(n.isp || 'unknown') + '</td>'
+      + '<td>' + esc(n.ip_type || 'unknown') + '</td>'
+      + '<td>' + (Number(n.ping) > 0 ? esc(n.ping) + ' ms' : '—') + '</td>'
+      + '<td>' + nodeStatus(n.sstp_status) + '</td>'
+      + '<td>' + nodeStatus(n.openvpn_status) + '</td>'
+      + '<td>' + (n.full_chain_verified ? '<span class="badge ok">通过</span>' : '<span class="badge">未通过</span>') + '</td>'
+      + '<td class="muted">' + esc(n.last_verified ? n.last_verified.replace('T', ' ').replace('Z', ' UTC') : '—') + '</td>'
+      + '<td>' + nodeAction(n) + '</td>'
+      + '</tr>').join('')
+    + '</tbody></table>';
+}
+
+async function loadValidatedNodes(force){
+  if(!force && Date.now() - lastNodesLoad < 15000) return;
+  try{
+    const d = await api('/api/nodes?all=1');
+    validatedNodes = d.nodes || [];
+    lastNodesLoad = Date.now();
+    renderValidatedNodes();
+  }catch(err){
+    $('#nodecount').textContent = '读取失败';
+    $('#validatedNodes').innerHTML = '<div class="empty">读取节点池失败：' + esc(err.message) + '</div>';
+  }
+}
 
 function renderExits(){
   const list = $('#list');
@@ -627,7 +718,7 @@ function renderExits(){
 }
 
 // 停掉出口后它的入站会留在面板里。这些入站现在走直连，
-// 用户既看不出它们和 fanout 的关系，也没有清理入口，所以单独列出来。
+// 用户既看不出它们和本服务的关系，也没有清理入口，所以单独列出来。
 function renderOrphans(){
   const box = $('#orphans');
   const list = view.direct || [];
@@ -680,15 +771,26 @@ async function poll(){
     $('#panel').textContent = view.panel
       ? (backendName() + ': ' + view.panel)
       : (view.panel_info || '');
-    // xray-cf-lite 的节点由它自己生成，fanout 这边只管把它们导到哪条出口
+    // xray-cf-lite 的节点由它自己生成，本服务只管把它们导到哪条出口
     $('#newnode').hidden = isXCL();
-    // 链接由 xray-cf-lite 的订阅体系发，fanout 这边导不出来
+    // 链接由 xray-cf-lite 的订阅体系发，本服务这边导不出来
     $('#exportAll').hidden = isXCL();
     renderExits();
     renderOrphans();
   }catch(e){}
   try{ renderJobs(await api('/api/jobs') || []); }catch(e){}
+  loadValidatedNodes(false);
 }
+
+$('#refreshNodes').onclick = async e => {
+  e.target.disabled = true;
+  try{
+    await api('/api/refresh', {method:'POST'});
+    await loadValidatedNodes(true);
+    toast('节点池已刷新');
+  }catch(err){ toast(err.message, true); }
+  e.target.disabled = false;
+};
 
 // ---- 新建向导 ----
 let regions = [], region = '', regionsLoaded = false;
@@ -902,6 +1004,31 @@ $('#go').onclick = async e => {
   }catch(err){ toast(err.message, true); }
   e.target.disabled = false;
 };
+
+// Validated Nodes 里的手动操作：没有 Slot 时启动新 Slot，已有同国家 Slot 时就地替换。
+document.addEventListener('click', async e => {
+  const start = e.target.closest('[data-node-start]');
+  if(start){
+    start.disabled = true;
+    try{
+      await api('/api/start?host=' + encodeURIComponent(start.dataset.nodeStart), {method:'POST'});
+      toast('正在启动 Slot');
+      poll();
+    }catch(err){ toast(err.message, true); start.disabled = false; }
+    return;
+  }
+  const replace = e.target.closest('[data-node-replace]');
+  if(replace){
+    if(!confirm('把 Slot ' + replace.dataset.slot + ' 换到这个 VPN Gate 节点？当前连接会短暂中断。')) return;
+    replace.disabled = true;
+    try{
+      await api('/api/replace?slot=' + encodeURIComponent(replace.dataset.slot)
+        + '&host=' + encodeURIComponent(replace.dataset.nodeReplace), {method:'POST'});
+      toast('正在切换到指定节点');
+      poll();
+    }catch(err){ toast(err.message, true); replace.disabled = false; }
+  }
+});
 
 // ---- 出口操作 ----
 document.addEventListener('click', async e => {
@@ -1154,7 +1281,7 @@ function socksURL(host, port, user, pass){
   return 'socks5://' + user + ':' + pass + '@' + host + ':' + port;
 }
 
-// SOCKS5 端口监听在母机（跑 fanout 的这台服务器）上，客户端要连的是母机的
+// SOCKS5 端口监听在母机（跑 VPN Gate Box 的这台服务器）上，客户端要连的是母机的
 // 公网 IPv4，流量再从出口 IP 出去。出口 IP 是"出去以后"的地址，不能当连接地址。
 // public_ip 是后端探测到的母机公网地址；探测不到才退回访问面板用的主机名。
 function credHost(e){

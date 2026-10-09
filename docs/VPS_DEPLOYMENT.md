@@ -9,8 +9,9 @@ Cloudflare/Worker 模式共用同一个 `node_pool.json` 和 `configs/*.ovpn`，
 ## 环境与部署
 
 - VPS：Debian 12，x86_64，1 vCPU，约 1 GB RAM，公网地址为 `23.165.200.6`。
-- VPN 管理器：`vps/fanout/`，基于 `byJoey/fanout` 的 MIT 许可提交，具体提交和
-  保留的上游声明见 [`vps/fanout/UPSTREAM.md`](../vps/fanout/UPSTREAM.md)。
+- VPN 管理器：VPN Gate Box 的 `vps/fanout/` 实现。namespace、固定端口和健康
+  检查的实现思路参考了 `byJoey/fanout` 的 MIT 许可项目；具体提交和保留的上游
+  声明见 [`vps/fanout/UPSTREAM.md`](../vps/fanout/UPSTREAM.md)。
 - 节点池：GitHub Actions 运行 `37889203045` 生成的共享池，部署到 VPS 后由
   `FANOUT_VALIDATED_POOL_FILE` 读取。
 - 隧道：Linux network namespace `fo67c61`，OpenVPN 进程和默认路由只存在于该
@@ -19,6 +20,9 @@ Cloudflare/Worker 模式共用同一个 `node_pool.json` 和 `configs/*.ovpn`，
   到公网。
 - 3x-ui：已检测到现有 `x-ui.service`。本轮只验证 SOCKS 出口，不修改现有
   3x-ui 数据库、入站或公网监听；标准 Xray outbound 导出仍按 v0.4 计划进行。
+- WebUI：与管理进程一起提供，显示 Validated Nodes、Exit Slots、节点健康、手动
+  启动/换节点、3x-ui 绑定和订阅入口。默认仍只监听 `127.0.0.1:8899`，通过 SSH
+  隧道或受保护的 HTTPS 反向代理访问。
 
 由于这台 VPS 只有 1 vCPU 和约 1 GB RAM，本轮只启动一个 Slot。多 Slot 不能从
 这次结果推断，后续至少需要更充足的 VPS 资源并分别验证每个 namespace、端口和
