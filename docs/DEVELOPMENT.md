@@ -81,8 +81,8 @@ Cloudflare 里程碑重新定义为：
 
 | 阶段 | 工作 | 验收 |
 | --- | --- | --- |
-| CF-1 | manifest schema、版本/过期和原子发布 | Actions 能将新鲜验证结果发布到 CF 存储，旧版本不会半写入 |
-| CF-2 | 自有 Worker 管理页、`/status`、受保护 `/sub` | 不部署 EdgeTunnel 也能得到可导入订阅 |
+| CF-1 | manifest schema、版本/过期和原子发布 | **已实现**：`data/cf_manifest.json` 只包含完整验证节点，脚本单次 PUT 到 `manifest:current` |
+| CF-2 | 自有 Worker 管理页、`/api/status`、受保护 `/sub` | **已实现源码**：`worker/control` 提供 `/admin`、`/api/status`、`/sub`；订阅不含凭证 |
 | CF-3 | Worker VLESS/SSTP 入口接入 manifest | 每条发布链接重新验证 expected/actual，失效节点不再发布 |
 | CF-4 | GitHub Actions 定时刷新与回滚 | 30/60 分钟刷新，发布失败保留上一份未过期版本并报警 |
 | CF-5 | 可选 EdgeTunnel 导入适配 | EdgeTunnel 只作为外部 UI/格式消费者，不成为主链路依赖 |
@@ -263,4 +263,4 @@ Actions先手动成功，再加30/60分钟schedule：候选上限50、SSTP并发
 
 保留既有许可边界：fanout MIT可复用并保留声明；CheckSocks5按GPL v3条件处理；gate与CF-vpngate无明确许可时仅参考；AimiliVPN暂仅功能参考。EdgeTunnel独立部署对接，不将许可兼容性未确认的Worker源码混成一份。许可记录不能用“组合项目”代替。
 
-v0.1 已在本机和 GitHub Actions 完成；v0.2 现用保留许可声明的 Multi-Exit 底座读取同一 `node_pool.json`，并已在一台小规格 Debian VPS 上完成一个固定 Slot 的真实验收（包括掉线失败、kill-switch 和自动恢复），证据见 [`VPS_DEPLOYMENT.md`](VPS_DEPLOYMENT.md)。后续按 CF-1～CF-5 完成 Cloudflare 自有管理/订阅层，再扩展 VPS 多 Slot 和统一订阅；EdgeTunnel 只作为可选兼容路径。
+v0.1 已在本机和 GitHub Actions 完成；v0.2 现用保留许可声明的 Multi-Exit 底座读取同一 `node_pool.json`，并已在一台小规格 Debian VPS 上完成一个固定 Slot 的真实验收（包括掉线失败、kill-switch 和自动恢复），证据见 [`VPS_DEPLOYMENT.md`](VPS_DEPLOYMENT.md)。CF-1/CF-2 已完成源码与自动化测试；下一步是创建一个 KV namespace、绑定 `vpngate-control` 并在 GitHub 仓库添加三个发布 Secrets，再进行一次真实 manifest 发布验收。随后完成 CF-3 的数据面绑定和 CF-4 的定时刷新/回滚，再扩展 VPS 多 Slot 和统一订阅；EdgeTunnel 只作为可选兼容路径。

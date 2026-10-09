@@ -1,0 +1,15 @@
+name = "vpngate-control"
+main = "worker.mjs"
+compatibility_date = "2026-10-09"
+workers_dev = true
+
+[observability]
+enabled = false
+
+[[kv_namespaces]]
+binding = "MANIFEST"
+id = "replace-with-kv-namespace-id"
+
+# Set these in the dashboard or with `wrangler secret put`.
+# VLESS_UUID, ADMIN_TOKEN, SUB_TOKEN, VPN_USERNAME, VPN_PASSWORD
+# DATA_PLANE_HOST, DATA_PLANE_PORT, DATA_PLANE_BASE_PATH

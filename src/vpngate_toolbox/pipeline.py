@@ -9,14 +9,17 @@ from .checker import check_node
 from .common import ToolError, atomic_write, is_fresh, utc_now, write_json
 from .full_chain import verify, verify_no_fallback
 from .intelligence import enrich
+from .manifest import build_cf_manifest, empty_cf_manifest
 from .pool import build_pool, save_pool
 from .subscription import make_connection
 
 
 def clear_publication(output: Path, runtime: Path, reason="run_in_progress"):
-    view = {"schema_version": 1, "generated_at": utc_now(), "status": reason, "nodes": []}
+    generated_at = utc_now()
+    view = {"schema_version": 1, "generated_at": generated_at, "status": reason, "nodes": []}
     write_json(output / "mode_a_validated.json", view)
     write_json(output / "residential.json", view)
+    write_json(output / "cf_manifest.json", empty_cf_manifest(reason, generated_at))
     atomic_write(runtime / "subscription.txt", b"", private=True)
     atomic_write(output / "nodes.txt", b"")
 
@@ -39,10 +42,12 @@ def publish(pool: dict, output: Path, runtime: Path, environment: dict, settings
         links.append(connection.link())
         protocol = node["protocols"]["sstp"]
         candidates.append("sstp://" + protocol["host"] + ":" + str(protocol["port"]) + " # " + node["node_id"])
-    view = {"schema_version": 1, "generated_at": utc_now(), "scope": "tcp_ipv4_ws", "no_fallback_control": guard, "nodes": valid}
+    generated_at = utc_now()
+    view = {"schema_version": 1, "generated_at": generated_at, "scope": "tcp_ipv4_ws", "no_fallback_control": guard, "nodes": valid}
     write_json(output / "mode_a_validated.json", view)
     residential = {**view, "nodes": [node for node in valid if node["protocols"]["sstp"]["egress"]["ip_type"] in ("strict_residential", "likely_residential")]}
     write_json(output / "residential.json", residential)
+    write_json(output / "cf_manifest.json", build_cf_manifest(valid, generated_at, settings, environment))
     atomic_write(output / "nodes.txt", ("\n".join(candidates) + ("\n" if candidates else "")).encode())
     atomic_write(runtime / "subscription.txt", ("\n".join(links) + ("\n" if links else "")).encode(), private=True)
     return len(valid)

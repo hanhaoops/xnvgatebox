@@ -2,6 +2,8 @@
 
 第一轮通过 HTTP/VLESS 对接两个独立 Worker。2026-10-08 确认原账号没有现成 Checker/EdgeTunnel 后，增加可复现部署准备。用户授权后已创建两个独立 Pages Worker、配置认证并部署；至少一条真实正向链路和失效后端对照通过，正式批次记录见 [CF_DEPLOYMENT.md](../docs/CF_DEPLOYMENT.md)。
 
+项目自己的管理与订阅 Worker 在 [`control/`](control/)：它读取统一验证池的 KV manifest，提供管理页和受保护订阅。它与 `edge/` 数据面分开，EdgeTunnel 不是控制面依赖；控制 Worker 的真实数据面绑定与全链路验活属于 CF-3。
+
 执行 `python3 scripts/prepare_workers.py` 从固定提交下载并校验源文件和完整许可证；或通过 `--source-cache` 读取已审计文件。生成目录是忽略的 `runtime/deploy/checker`、`runtime/deploy/edge`，各自包括 `worker.mjs`、`upstream.mjs`、`LICENSE`、`SOURCE.json` 和 `wrangler.toml`。两份程序分别修改、分别部署、分别履行 GPL v3/GPL v2 义务。不要拼接两份部署包或删去版权和许可证。源程序的功能描述注释不是许可依据；许可依据和固定来源见 [THIRD_PARTY.md](../THIRD_PARTY.md)。
 
 准备部署名：`vpngate-checker`、`vpngate-edge`。生成的 `pages-upload.zip` 可通过 Pages 高级模式直接上传，执行 `_worker.js`，域名为确认创建后的 `*.pages.dev`。Checker Secret 为 `CHECKER_TOKEN`，至少 32 个字符；Edge Secret 为 `UUID`，必须为随机 UUID v4。不得硬编码到源文件或提交 Git。未设置有效 Secret 时，业务入口返回 503；`GET /health` 仅显示服务名、版本和配置是否完整，不输出凭证。`.env` 保存确认后的域名与本机凭证，权限应为 600。

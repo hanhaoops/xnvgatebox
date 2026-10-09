@@ -253,6 +253,7 @@ class VerificationTests(unittest.TestCase):
             self.value["mode_a"]["expires_at"] = "2000-01-01T00:00:00Z"
             self.assertEqual(publish({"nodes": [self.value]}, output, runtime, ENV, SETTINGS, guard), 0)
             self.assertEqual((runtime / "subscription.txt").read_text(), "")
+            self.assertEqual(json.loads((output / "cf_manifest.json").read_text())["nodes"], [])
             self.value["mode_a"]["expires_at"] = expires_at(3600)
             with self.assertRaisesRegex(ToolError, "publication_config_changed"):
                 publish({"nodes": [self.value]}, output, runtime, {**ENV, "uuid": "different"}, SETTINGS, guard)
@@ -276,6 +277,10 @@ class PipelineTests(unittest.TestCase):
             self.assertIn(ENV["uuid"], subscription.read_text())
             self.assertEqual(subscription.stat().st_mode & 0o777, 0o600)
             self.assertNotIn(ENV["uuid"], "".join(path.read_text() for path in output.glob("*.json")))
+            manifest = json.loads((output / "cf_manifest.json").read_text())
+            self.assertEqual(manifest["kind"], "vpngate_cf_validated_nodes")
+            self.assertEqual(manifest["nodes"][0]["expected_exit_ip"], EXIT)
+            self.assertNotIn(ENV["password"], (output / "cf_manifest.json").read_text())
             pool = json.loads((output / "node_pool.json").read_text())
             self.assertEqual(pool["nodes"][0]["protocols"]["openvpn"]["status"], "not_tested")
             # An upstream failure clears old working subscriptions rather than republishing them.

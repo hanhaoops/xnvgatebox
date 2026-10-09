@@ -56,3 +56,11 @@ v0.1 的“至少一条实际订阅链路、expected=actual、无需 VPS”完�
 仓库：[hanhaoops/xnvgatebox](https://github.com/hanhaoops/xnvgatebox)。运行：[37889203045](https://github.com/hanhaoops/xnvgatebox/actions/runs/37889203045)，提交 `5cfbe55d77472bd28e9bf368c165fd4206609693`，事件 `workflow_dispatch`，结论 `success`。工作流使用四个仓库 Secrets，未打印或上传其值。
 
 远端报告结果：50 个候选、39 个 SSTP 通过、27 个 Mode A 最终节点通过、0 个 Checker 服务错误；失效 SSTP 对照状态 `passed`，阻断请求数 2；住宅节点 0。27 条最终证据均要求 expected 与四次 actual 出口 IP 相等并通过内容检查。公开 artifact 没有发现 UUID 或 Bearer 凭证模式；私有 `runtime/subscription.txt` 没有进入 GitHub。
+
+## 自有管理层第一轮实现（CF-1/CF-2）
+
+`worker/control/worker.mjs` 是项目自己的 Cloudflare Worker，和可选的 `worker/edge` 数据面分开。它从 KV 的 `manifest:current` 读取 GitHub Actions 生成的 `data/cf_manifest.json`，提供 `/health`、`/admin`、`/api/status`、`/api/manifest` 和受保护的 `/sub?token=...`。manifest 只保留节点入口、expected/actual 出口 IP、画像摘要、有效期和数据面地址，不保存 VPN 用户名、密码、VLESS UUID 或任何访问 token。
+
+工作流增加了 `publish_cf` 手工开关。选择 `serverless` 并打开该开关时，工作流通过 `scripts/publish_cf_manifest.py` 用 `CF_API_TOKEN`、`CF_ACCOUNT_ID`、`CF_KV_NAMESPACE_ID` 单次 PUT 替换 KV 键。没有这三个仓库 Secrets 时不会发布；默认的 `pool-only` 运行也不会写入 Cloudflare。Worker 的部署模板和 Secret 名称见 [`worker/control/README.md`](../worker/control/README.md)。
+
+这一轮只完成自有控制面和订阅生成，实际 VLESS/SSTP 数据面仍需在 CF-3 绑定一个可验活的 Worker。订阅生成器只接受 manifest 中满足新鲜有效期、`expected_exit_ip == actual_exit_ip` 且官方 `*.opengw.net` 的节点；manifest 过期、为空或被篡改时 `/sub` 返回非 200。EdgeTunnel 仍然是可选适配器，不是这个控制面的运行依赖。

@@ -14,7 +14,7 @@ python3 scripts/toolbox.py pool
 
 无需 Cloudflare、UUID 或远程节点池地址即可生成 `data/node_pool.json`、对应 SHA256 和 `data/configs/*.ovpn`。OpenVPN 配置不执行，协议状态保持 `not_tested`；本命令是后续 VPS Standalone 使用的同一个 Builder。可用 `--csv-file /absolute/path/vpngate.csv` 解析官方格式快照。国家过滤、候选预算等在 `config/settings.json` 修改。
 
-开始 Mode A 前，部署你自己的 Checker 与兼容的 EdgeTunnel，按 [Worker 适配说明](worker/README.md) 核对接口。复制 `.env.example` 为 `.env`，设置 `CHECKER_URL`、`EDGETUNNEL_HOST`（只有域名）和 `VLESS_UUID`。可选访问控制与画像参数也在此文件；工具读取 `.env`，不执行其中任何 shell 表达式。
+开始 Mode A 前，部署你自己的 Checker 和一个已完成全链路验活的数据面 Worker，按 [Worker 适配说明](worker/README.md) 核对接口。项目自己的管理/订阅 Worker 见 [`worker/control`](worker/control/)，可选的 EdgeTunnel 适配器只用于兼容已有数据面。复制 `.env.example` 为 `.env`，设置 `CHECKER_URL`、数据面域名和 `VLESS_UUID`。可选访问控制与画像参数也在此文件；工具读取 `.env`，不执行其中任何 shell 表达式。
 
 ```sh
 python3 scripts/install_xray.py
@@ -30,6 +30,7 @@ python3 scripts/toolbox.py mode-a
 | `data/node_pool.json` | 候选与协议证据；不等于最终可消费列表 |
 | `data/mode_a_validated.json` | 当前环境最终 VLESS 检查通过且带有效期的节点 |
 | `data/residential.json` | 最终通过且分类为 strict 或 likely 的节点；保留两者差别 |
+| `data/cf_manifest.json` | 可发布到 Cloudflare KV 的无凭证统一节点池 |
 | `data/nodes.txt` | 最终通过节点的 SSTP 入口清单，供查看，不含 VLESS UUID |
 | `data/report.json` | 反向测试、最终出口、配置摘要和失败原因，不含 UUID |
 | `runtime/subscription.txt` | 通过验证的 VLESS 明文订阅，权限 0600，不提交、不上传公开 artifact |
@@ -43,24 +44,25 @@ python3 scripts/toolbox.py mode-a
 工作流 [update.yml](.github/workflows/update.yml) 默认手动触发：
 
 - `pool-only`：无需任何 Cloudflare Secrets，构建共享候选池。
-- `serverless`：设置与 `.env.example` 同名的仓库 Secrets 后执行实际链路检查。
+- `serverless`：设置与 `.env.example` 同名的仓库 Secrets 后执行实际链路检查；可选打开 `publish_cf` 将 `data/cf_manifest.json` 发布到自有 control Worker 的 KV。
 
-公开 artifact 只包括池、配置数据、验活证据和报告，不包含 `.env` 或订阅。成功后下载 `mode_a_validated.json` 等证据到 `data/`，在本机使用与 Actions 相同的 EdgeTunnel/UUID 和配置生成私有订阅：
+公开 artifact 只包括池、配置数据、验活证据、`cf_manifest.json` 和报告，不包含 `.env` 或订阅。成功后下载 `mode_a_validated.json` 等证据到 `data/`，在本机使用相同数据面/UUID 和配置生成私有订阅：
 
 ```sh
 python3 scripts/toolbox.py export-subscription
 ```
 
-导出会重新比较订阅配置摘要、最终 IP 与有效期，拒绝用不同 UUID/域名/路径拼接旧验证结果。只信任你自己的证据来源；SHA256 是内容校验，不是发布者签名。本版没有自动部署 Cloudflare、提交产物、配置 GitHub Pages 或托管长期私有订阅的能力。公开仓库的 `serverless` 工作流已完成一次托管验收；小时调度仍保持注释状态，启用前应先决定 Actions 用量和证据刷新策略，调度延误需由证据有效期处理。
+导出会重新比较订阅配置摘要、最终 IP 与有效期，拒绝用不同 UUID/域名/路径拼接旧验证结果。只信任你自己的证据来源；SHA256 是内容校验，不是发布者签名。Cloudflare KV 发布和 control Worker 部署需要按 [`worker/control/README.md`](worker/control/README.md) 配置；小时调度仍保持注释状态，启用前应先决定 Actions 用量和证据刷新策略，调度延误需由证据有效期处理。
 
 ## 验证
 
 ```sh
 python3 -m unittest discover -s tests -v
 node tests/test_worker_guards.mjs
+node tests/test_cf_control.mjs
 ```
 
-31 项 Python 测试覆盖入口变化、字段缺失、画像冲突、429、IP 不匹配、直出反向测试、证书错误拒绝、过期和配置变化拒绝发布、旧订阅清空、密钥不进入公共产物、锁和清理；29 项 Worker 边界检查覆盖认证、协议、目标限制及参数覆盖拒绝。安装 Xray 后额外检查真实二进制接受配置、loopback 监听与进程清理。构造测试与真实 VPN 验收分别记录；当前真实证据在 `data/report.json`、`data/mode_a_validated.json`，有效期为一小时，不能据此承诺节点持续在线。
+31 项 Python 测试覆盖入口变化、字段缺失、画像冲突、429、IP 不匹配、直出反向测试、证书错误拒绝、过期和配置变化拒绝发布、旧订阅清空、密钥不进入公共产物、锁和清理；29 项 Worker 边界检查加 10 项 control Worker 测试覆盖认证、协议、目标限制、过期 manifest 和参数覆盖拒绝。安装 Xray 后额外检查真实二进制接受配置、loopback 监听与进程清理。构造测试与真实 VPN 验收分别记录；当前真实证据在 `data/report.json`、`data/mode_a_validated.json`，有效期为一小时，不能据此承诺节点持续在线。
 
 第一轮结果与后续实测步骤见 [ROUND1.md](docs/ROUND1.md)。核心工具许可为 GPL-3.0-only；独立 EdgeTunnel 修改为 GPL-2.0-only，依赖与复用边界见 [THIRD_PARTY.md](THIRD_PARTY.md)。本版不支持未经验证的 UDP、IPv6、XHTTP。
 
