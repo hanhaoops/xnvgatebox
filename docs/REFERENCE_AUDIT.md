@@ -4,7 +4,7 @@
 
 设计说明于 2026 年 10 月 8 日按用户确认的最终方案同步，开发基准见 [DEVELOPMENT.md](DEVELOPMENT.md)。三个部署 Profile 共用同一 Pool Builder 和数据契约，VPS Standalone 可独立生成本地池；本次同步没有重新核查上游提交或改变许可证结论。
 
-后续执行状态：2026-10-08 用户授权后，已基于本审计的固定提交和 SHA256 分别准备、修改与部署 GPL v3 Checker 和 GPL v2 EdgeTunnel，保留完整许可和来源，不合并两个程序。真实 v0.1 链路结果见 [CF_DEPLOYMENT.md](CF_DEPLOYMENT.md)，正式复用清单见 [THIRD_PARTY.md](../THIRD_PARTY.md)。下文“本次没有部署”等表述描述原始源码审计时点，不再代表当前执行状态。
+后续执行状态：2026-10-08 用户授权后，已基于本审计的固定提交和 SHA256 分别准备、修改与部署 GPL v3 Checker 和 GPL v2 EdgeTunnel，保留完整许可和来源，不合并两个程序。2026-10-09 开始引入 MIT fanout 作为 v0.2 底座，保留完整许可，并把节点来源改为共享 `node_pool.json`；真实部署证据仍需在目标 VPS 完成。真实 v0.1 链路结果见 [CF_DEPLOYMENT.md](CF_DEPLOYMENT.md)，正式复用清单见 [THIRD_PARTY.md](../THIRD_PARTY.md)。下文“本次没有部署”等表述描述原始源码审计时点，不再代表当前执行状态。
 
 ## 1 许可证与复用边界
 

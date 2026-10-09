@@ -1,0 +1,16 @@
+[Unit]
+Description=xnvgatebox VPS Multi-Exit fanout
+After=network-online.target x-ui.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/xnvgatebox-fanout
+ExecStart=/usr/local/bin/xnvgatebox-fanout -max 1 -dir /var/lib/xnvgatebox/fanout -panel 3x-ui
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillMode=mixed
+
+[Install]
+WantedBy=multi-user.target

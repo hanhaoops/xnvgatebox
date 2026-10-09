@@ -235,4 +235,4 @@ Actions先手动成功，再加30/60分钟schedule：候选上限50、SSTP并发
 
 保留既有许可边界：fanout MIT可复用并保留声明；CheckSocks5按GPL v3条件处理；gate与CF-vpngate无明确许可时仅参考；AimiliVPN暂仅功能参考。EdgeTunnel独立部署对接，不将许可兼容性未确认的Worker源码混成一份。许可记录不能用“组合项目”代替。
 
-后续开发的第一个任务是 v0.1：运行一条真实 VLESS 链路，记录第一阶段 expected、最终 actual 与强制出口失败测试，再扩展候选数量与其他版本功能。进入 v0.2 时，先用 fanout 底座跑通一个 VPS Standalone Slot，再考虑接远程共享池；这样可以分别证明“无 VPS”和“只有一台 VPS”两种模式都能独立成立。
+后续开发的第一个任务是 v0.1：运行一条真实 VLESS 链路，记录第一阶段 expected、最终 actual 与强制出口失败测试，再扩展候选数量与其他版本功能。v0.1 已在本机和 GitHub Actions 完成；v0.2 现用保留 MIT 许可的 fanout 底座读取同一 `node_pool.json`，并已在一台小规格 Debian VPS 上完成一个固定 Slot 的真实验收（包括掉线失败、kill-switch 和自动恢复），证据见 [`VPS_DEPLOYMENT.md`](VPS_DEPLOYMENT.md)。后续再扩展远程池、策略、多 Slot 和 WebUI；这样可以分别证明“无 VPS”和“只有一台 VPS”两种模式都能独立成立。

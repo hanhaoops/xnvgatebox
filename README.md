@@ -2,7 +2,7 @@
 
 共用一个 Pool Builder，先实现无 VPS 的 Cloudflare/VLESS 验活，再基于 fanout 实现固定 VPS Exit Slot。开发基准见 [DEVELOPMENT.md](docs/DEVELOPMENT.md)。
 
-第一轮已经提供可执行的候选池构建、SSTP HTTP 检测适配、strict/likely 家宽分级、VLESS/WS 订阅生成、Xray 最终链路检查和 Actions 工作流。**2026-10-08 已部署两个独立 Cloudflare Worker，并通过 v0.1 真实链路验收：10 个候选中 8 个 SSTP 通过、2 个最终 VLESS 通过，失效 SSTP 后端的两次请求均失败。** 2026-10-09 又在公开 GitHub Actions 中完成托管验收：50 个候选中 39 个 SSTP 通过、27 个最终 VLESS 通过。当前通过节点的画像为 unknown，住宅列表为空；VPS Manager 与 WebUI 尚未验收。实测记录见 [CF_DEPLOYMENT.md](docs/CF_DEPLOYMENT.md)。
+第一轮已经提供可执行的候选池构建、SSTP HTTP 检测适配、strict/likely 家宽分级、VLESS/WS 订阅生成、Xray 最终链路检查和 Actions 工作流。**2026-10-08 已部署两个独立 Cloudflare Worker，并通过 v0.1 真实链路验收：10 个候选中 8 个 SSTP 通过、2 个最终 VLESS 通过，失效 SSTP 后端的两次请求均失败。** 2026-10-09 又在公开 GitHub Actions 中完成托管验收：50 个候选中 39 个 SSTP 通过、27 个最终 VLESS 通过；同日完成一台小规格 Debian VPS 的 v0.2 单 Slot 验收，固定 `127.0.0.1:17928` 经 namespace 隔离、expected/actual 一致，强杀 OpenVPN 后 SOCKS 失败并自动恢复。当前节点画像仍为 unknown，住宅列表为空；多 Slot、WebUI 和 3x-ui 自动写入尚未验收。实测记录见 [CF_DEPLOYMENT.md](docs/CF_DEPLOYMENT.md) 与 [VPS_DEPLOYMENT.md](docs/VPS_DEPLOYMENT.md)。
 
 ## 本机使用
 

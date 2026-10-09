@@ -11,6 +11,6 @@
 | EdgeTunnel | 独立部署准备；强制 SSTP/globalproxy、关闭管理页面和 UDP；生成对应 VLESS/WS 参数 | GPL v2；固定提交 `af4f9837e1843e34159018713bc8749ccec3004d`，保留完整 LICENSE 和上游源文件；不与 GPL v3 Checker 合并 |
 | Xray-core | 下载官方 v26.3.27 二进制，按归档 SHA256 验证后本地执行；二进制不纳入 Git | [官方发布](https://github.com/XTLS/Xray-core/releases/tag/v26.3.27)、[MPL-2.0](https://github.com/XTLS/Xray-core/blob/v26.3.27/LICENSE)；安装器保留归档内 LICENSE / README |
 | GitHub 官方 Actions | 固定提交引用 checkout、setup-python、upload-artifact | 官方仓库许可；固定提交写在工作流中 |
-| fanout | v0.2 计划复用，第一轮尚未引入 | MIT；引入时需保留完整上游版权与许可，并记录修改 |
+| fanout | `vps/fanout/` 作为 v0.2 Multi-Exit 底座；读取本项目共享 `node_pool.json`，并保留完整上游版权与许可 | MIT；上游提交 `d7ce5224caf3469b19876982abdf8d1be16c4a8b`；修改说明见 [`vps/fanout/UPSTREAM.md`](vps/fanout/UPSTREAM.md) |
 
 完整的五项目许可证证据和源码行为见 [REFERENCE_AUDIT.md](docs/REFERENCE_AUDIT.md)。GPL 许可正文是标准许可文本，不是 Checker 实现代码的复用。
