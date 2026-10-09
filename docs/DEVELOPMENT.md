@@ -9,9 +9,11 @@
 - 对外产品名、管理界面标题、订阅页面和安装文档统一使用 **xnvgatebox**。仓库为 [`hanhaoops/xnvgatebox`](https://github.com/hanhaoops/xnvgatebox)。
 - “出口节点”“出口槽位”“订阅”“管理面”是用户界面和操作文档的默认术语。来源站点、协议名、上游仓库名和代码兼容字段中的 `VPN`/`SSTP`/`OpenVPN` 可以在必要的技术上下文中保留，但不作为产品品牌或用户必须理解的概念。
 - 用户只执行一次统一安装/部署流程，选择 `serverless`、`vps` 或 `hybrid` 运行模式；不得要求用户分别创建 Checker、Edge、Control 等多个项目，也不得要求重复上传多个 Worker。
-- 部署包内部可以保留检测、数据面、管理和订阅模块的隔离。隔离是实现边界，不是用户的部署步骤；对外暴露一个管理入口、一个订阅入口和一套配置向导。
-- 当前已存在的 `vpngate-checker`、`vpngate-edge` 和 `vpngate-control` 是第一轮验证用的过渡部署。下一轮将把它们收敛为一个 xnvgatebox 部署单元（单一部署命令、单一配置文件、单一状态页），内部是否使用 Worker 路由、Service Binding 或 Pages Functions 由实现决定。
+- Cloudflare 最终形态严格限制为 **一个 Worker + 一个 KV Namespace**。管理、订阅、节点验证和数据面入口由同一个 Worker 按路径或请求类型处理；Service Binding、第二个 Worker、第二个 Pages 项目都不属于用户部署步骤。
+- Worker 内部可以按模块组织检测、数据面、管理和订阅代码，但这是单脚本内部结构。涉及第三方代码时必须遵守各自许可证；不以“拼接多个上游 Worker”的方式规避许可证边界，必要功能应由本项目自有、可兼容许可的代码实现。
+- 当前已存在的 `vpngate-checker`、`vpngate-edge` 和 `vpngate-control` 是第一轮验证用的过渡部署。下一轮必须把它们合并为一个 xnvgatebox Worker（单一部署命令、单一配置文件、单一状态页）。
 - VPS 模式同样只提供一个安装入口；Multi-Exit、namespace、固定 SOCKS 端口和 Xray 导出由同一安装流程配置。3x-ui 是可选消费端，不是额外的部署项目。
+- VPS 安装必须提供一条可审计、可重复执行的命令，例如 `xnvgatebox install --mode vps`；命令完成依赖检查、程序安装、配置初始化、namespace/SOCKS 服务注册和健康检查，不要求用户分步执行多条部署命令。
 
 项目先完成三个可运行、可演示的闭环：**无 VPS 的 VLESS 节点、VPS 上多个固定出口、可直接粘贴的 3x-ui/Xray 配置**。核心产品是 Exit Slot：后台 VPN Gate 节点可以更换，`slot_id + SOCKS port + outbound tag` 保持不变。
 
@@ -60,25 +62,25 @@ Mode B：VPS选择候选 → 本机OpenVPN/SOCKS最终验活 → Slot healthy
 
 ### 2.1 一个部署包、三种运行模式
 
-统一部署入口读取一个配置文件，再选择运行模式。用户不需要分别部署表格中的组件。
+统一部署入口读取一个配置文件，再选择运行模式。Cloudflare 模式只发布一个 Worker；VPS 模式只执行一条安装命令。用户不需要分别部署表格中的组件。
 
 | Profile | 部署入口 | 节点池来源 | 最终验活位置 | 适用目标 |
 | --- | --- | --- | --- | --- |
-| Serverless / No VPS | 一次部署 xnvgatebox Cloudflare 单元 | Actions 运行 Pool Builder | Actions + Cloudflare/VLESS | 完全不需要 VPS 的订阅方案 |
-| VPS Standalone | 一次安装 xnvgatebox VPS 单元 | **同一 Pool Builder 在 VPS 本机运行** | VPS 本机 OpenVPN/SOCKS/Xray | 一台 VPS 多地区、多 Slot 出口 |
-| Hybrid | 一次部署后启用两端配置 | 远程池初筛 + 本机补测 | VPS 本机 | 减少 VPS 抓取/分类成本，同时保留本机真实性 |
+| Serverless / No VPS | 一次发布一个 xnvgatebox Worker + KV | Actions 运行 Pool Builder | Actions + Cloudflare/VLESS | 完全不需要 VPS 的订阅方案 |
+| VPS Standalone | 一条命令安装 xnvgatebox VPS 单元 | **同一 Pool Builder 在 VPS 本机运行** | VPS 本机 OpenVPN/SOCKS/Xray | 一台 VPS 多地区、多 Slot 出口 |
+| Hybrid | 一条命令安装 VPS，并在同一 Worker 配置远程池 | 远程池初筛 + 本机补测 | VPS 本机 | 减少 VPS 抓取/分类成本，同时保留本机真实性 |
 
 三个 Profile 共用 `models / source parser / classifier / selection policy / exit comparison`。统一的含义是“逻辑、配置和数据契约统一”，不是强制所有运行模式连接同一个中心服务。任何 Profile 都不得因为远程池不可用而偷偷切换为另一套未经验证的来源；VPS Standalone 应显式配置为本地 Pool Builder。模式切换只改配置，不重新部署一套程序。
 
 ## 2.2 统一 Cloudflare 管理层、数据面与订阅接口
 
-Mode A 的正式链路由一个 xnvgatebox 部署单元承载：GitHub Actions 生成并验证节点池；Cloudflare 存储当前版本的短期 manifest；部署单元内部提供管理页、状态页、订阅接口和数据面入口。检测、数据面、管理和订阅可以在代码上保持模块隔离，但用户只配置一次。GitHub Actions 不承载用户代理流量，Cloudflare 也不能把未验证的 GitHub IP/端口直接当成出口。
+Mode A 的正式链路由一个 xnvgatebox Worker 承载：GitHub Actions 生成并验证节点池；Cloudflare KV 存储当前版本的短期 manifest；同一个 Worker 内提供管理页、状态页、订阅接口、节点验证和数据面入口。检测、数据面、管理和订阅可以在脚本内部保持模块隔离，但用户只上传/发布一次。GitHub Actions 不承载用户代理流量，Worker 也不能把未验证的 GitHub IP/端口直接当成出口。
 
 ```text
 GitHub Actions
   → validated_nodes.json（带版本、生成时间、expires_at）
   → Cloudflare KV / 受保护发布 API
-  → xnvgatebox Cloudflare 单元
+  → xnvgatebox Worker（唯一 Cloudflare Worker）
        /admin   管理与状态
        /sub     带 token 的 VLESS 订阅
        /        只接受受控的节点参数
@@ -86,7 +88,7 @@ GitHub Actions
 
 Worker 的 VLESS 链接必须由当前 manifest 派生，不能接受任意 `proxyip`、任意 SOCKS5 地址或任意目标主机。只允许 manifest 中仍然有效的 VPN Gate 节点，并在发布前后保留 `expected_exit_ip == actual_exit_ip` 证据。管理接口使用单独的管理员口令或 Cloudflare Access；订阅 token 只能读取当前有效版本，manifest 过期或为空时返回非 200，避免客户端被空订阅清空。
 
-EdgeTunnel 适配器只输出兼容的节点/订阅格式或调用导入接口，不把它的 Worker 源码复制到本项目，也不增加用户的部署步骤。若未来启用该适配器，许可证、来源和运行边界仍单独记录；它不是 xnvgatebox 的主链路依赖。
+EdgeTunnel 适配器只输出兼容的节点/订阅格式或调用导入接口，不把它的 Worker 源码复制到本项目，也不增加用户的部署步骤。若未来启用该适配器，许可证、来源和运行边界仍单独记录；它不是 xnvgatebox 的主链路依赖。最终发布仍只有一个 xnvgatebox Worker。
 
 Cloudflare 里程碑重新定义为：
 
@@ -257,7 +259,7 @@ public/     index.html / nodes.txt
 docs/       DEVELOPMENT.md / REFERENCE_AUDIT.md
 ```
 
-v0.x 核心流水线用 Python，`Pool Builder` 必须既能在 Actions 调用，也能在 VPS Standalone 调用；Worker 沿用现有 JavaScript 与必要适配，VPS 尽量复用现有 Multi-Exit 底座。不要为了三种运行模式复制三套抓取/分类实现，也不先搭 TypeScript 迁移、多 JSON Schema、SQLite、签名服务或 IPC 框架。共享 JSON 字段和小量必要模型校验即可。统一部署入口、配置文件和状态页优先于增加新的可部署服务。
+v0.x 核心流水线用 Python，`Pool Builder` 必须既能在 Actions 调用，也能在 VPS Standalone 调用；Cloudflare 最终只发布一个 Worker，VPS 尽量复用现有 Multi-Exit 底座。不要为了三种运行模式复制三套抓取/分类实现，也不先搭 TypeScript 迁移、多 JSON Schema、SQLite、签名服务或 IPC 框架。共享 JSON 字段和小量必要模型校验即可。统一部署入口、配置文件和状态页优先于增加新的可部署服务。
 
 Actions先手动成功，再加30/60分钟schedule：候选上限50、SSTP并发4、Xray并发2、单节点限时30秒、完整链路45秒、瞬态错误最多重试1次；这些是可调起始值。画像按出口IP缓存24小时，链路证据默认60分钟过期。429/Worker异常单独报告，不把服务限额当所有VPN失效；旧报告可保留但过期节点不发订阅。具体平台配额见审计文档。
 
