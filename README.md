@@ -2,7 +2,7 @@
 
 共用一个 Pool Builder，先实现无 VPS 的 Cloudflare/VLESS 验活，再基于 fanout 实现固定 VPS Exit Slot。开发基准见 [DEVELOPMENT.md](docs/DEVELOPMENT.md)。
 
-第一轮已经提供可执行的候选池构建、SSTP HTTP 检测适配、strict/likely 家宽分级、VLESS/WS 订阅生成、Xray 最终链路检查和 Actions 工作流。**2026-10-08 已部署两个独立 Cloudflare Worker，并通过 v0.1 真实链路验收：10 个候选中 8 个 SSTP 通过、2 个最终 VLESS 通过，失效 SSTP 后端的两次请求均失败。** 当前两个通过节点的画像为 unknown，住宅列表为空；GitHub Actions 托管运行、VPS Manager 与 WebUI 尚未验收。实测记录见 [CF_DEPLOYMENT.md](docs/CF_DEPLOYMENT.md)。
+第一轮已经提供可执行的候选池构建、SSTP HTTP 检测适配、strict/likely 家宽分级、VLESS/WS 订阅生成、Xray 最终链路检查和 Actions 工作流。**2026-10-08 已部署两个独立 Cloudflare Worker，并通过 v0.1 真实链路验收：10 个候选中 8 个 SSTP 通过、2 个最终 VLESS 通过，失效 SSTP 后端的两次请求均失败。** 2026-10-09 又在公开 GitHub Actions 中完成托管验收：50 个候选中 39 个 SSTP 通过、27 个最终 VLESS 通过。当前通过节点的画像为 unknown，住宅列表为空；VPS Manager 与 WebUI 尚未验收。实测记录见 [CF_DEPLOYMENT.md](docs/CF_DEPLOYMENT.md)。
 
 ## 本机使用
 
@@ -51,7 +51,7 @@ python3 scripts/toolbox.py mode-a
 python3 scripts/toolbox.py export-subscription
 ```
 
-导出会重新比较订阅配置摘要、最终 IP 与有效期，拒绝用不同 UUID/域名/路径拼接旧验证结果。只信任你自己的证据来源；SHA256 是内容校验，不是发布者签名。本版没有自动部署 Cloudflare、提交产物、配置 GitHub Pages 或托管长期私有订阅的能力。手动验收成功后可启用工作流内的小时调度示例；调度延误需由证据有效期处理。
+导出会重新比较订阅配置摘要、最终 IP 与有效期，拒绝用不同 UUID/域名/路径拼接旧验证结果。只信任你自己的证据来源；SHA256 是内容校验，不是发布者签名。本版没有自动部署 Cloudflare、提交产物、配置 GitHub Pages 或托管长期私有订阅的能力。公开仓库的 `serverless` 工作流已完成一次托管验收；小时调度仍保持注释状态，启用前应先决定 Actions 用量和证据刷新策略，调度延误需由证据有效期处理。
 
 ## 验证
 

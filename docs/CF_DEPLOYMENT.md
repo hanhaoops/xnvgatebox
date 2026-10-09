@@ -49,4 +49,10 @@ GitHub Actions 连接与 VPS 阶段均在真实 v0.1 验收后推进。
 
 正式池、报告和最终视图在 `data/`，私有订阅在 `runtime/subscription.txt`（600）。导出器从本次真实证据成功重新生成 2 条链接；公开产物已检查不含 Token / UUID。通过节点证据默认一小时有效，记录在各自 `expires_at` 中。住宅列表为空；没有取得 ASN/ISP/住宅标签，不能把这两个出口标为住宅。节点后续是否在线必须重新验证。
 
-v0.1 的“至少一条实际订阅链路、expected=actual、无需 VPS”完成条件已达到。本次验活在本机执行；GitHub Actions 文件已存在，尚未在用户仓库中运行。
+v0.1 的“至少一条实际订阅链路、expected=actual、无需 VPS”完成条件已达到。本次本机验活和 GitHub Actions 托管验活均已完成；公开仓库和运行链接记录在 [ROUND1.md](ROUND1.md)。
+
+## GitHub Actions 托管验收
+
+仓库：[hanhaoops/xnvgatebox](https://github.com/hanhaoops/xnvgatebox)。运行：[37889203045](https://github.com/hanhaoops/xnvgatebox/actions/runs/37889203045)，提交 `5cfbe55d77472bd28e9bf368c165fd4206609693`，事件 `workflow_dispatch`，结论 `success`。工作流使用四个仓库 Secrets，未打印或上传其值。
+
+远端报告结果：50 个候选、39 个 SSTP 通过、27 个 Mode A 最终节点通过、0 个 Checker 服务错误；失效 SSTP 对照状态 `passed`，阻断请求数 2；住宅节点 0。27 条最终证据均要求 expected 与四次 actual 出口 IP 相等并通过内容检查。公开 artifact 没有发现 UUID 或 Bearer 凭证模式；私有 `runtime/subscription.txt` 没有进入 GitHub。

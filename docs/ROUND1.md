@@ -10,7 +10,15 @@
 
 原 Checker `/api/lookup` 实测 429，生成版本改为官方免费 IP-only `/json` 取得隧道基线；独立画像 API 未配置，因此 ASN、ISP、住宅类别保持 unknown，`data/residential.json` 为空，不把这次网络验收称为家宽筛选验收。T1 内层 TLS 身份认证技术债仍存在。
 
-31 项 Python 测试与 29 项 Worker 边界检查通过。v0.1 的本机真实订阅链路完成条件已达到；下一步是将同一流程接入用户 GitHub 仓库并验收托管运行，再进入需要真实 Linux VPS 的 v0.2。下文为首次离线实现记录，原先“尚未真实验收”的状态已由本节更新。
+31 项 Python 测试与 29 项 Worker 边界检查通过。v0.1 的本机真实订阅链路完成条件已达到；同一流程已经接入公开仓库并完成托管验收，再进入需要真实 Linux VPS 的 v0.2。下文为首次离线实现记录，原先“尚未真实验收”的状态已由本节更新。
+
+## 2026-10-09 GitHub Actions 托管验收
+
+公开仓库为 [hanhaoops/xnvgatebox](https://github.com/hanhaoops/xnvgatebox)。已配置四个 Actions Secrets：`CHECKER_URL`、`CHECKER_TOKEN`、`EDGETUNNEL_HOST`、`VLESS_UUID`；值未进入代码或 artifact。`Test` 工作流在首个提交上通过。
+
+`serverless` 工作流运行 [37889203045](https://github.com/hanhaoops/xnvgatebox/actions/runs/37889203045) 成功：50 个候选、39 个 SSTP 通过、27 个最终 VLESS 节点发布，失效后端对照两次请求被阻断。27 个节点均满足各自 expected_exit_ip 与四次 actual_exit_ip 相等及 HTTPS 内容检查；本次画像未配置，`residential.json` 仍为空。公开 artifact 只含池、OpenVPN 配置、证据与报告，凭证扫描通过；没有上传私有订阅。
+
+证据只代表本次 Actions runner 的一小时有效期。后续若启用定时刷新，需先确定 Actions 用量、artifact 留存策略以及如何在本机重新导出与分发私有订阅；不能把公开 artifact 当作长期订阅地址。
 
 日期：2026 年 10 月 8 日。范围：v0.1 的可执行工具与工作流，尚未完成真实端到端里程碑验收。
 
