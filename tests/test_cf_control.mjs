@@ -57,4 +57,32 @@ invalid.nodes[0].sstp_host = 'attacker.example.com';
 response = await handleRequest(request('/sub?token=sub-secret'), { ...env, MANIFEST: { async get() { return invalid; } } });
 assert.equal(response.status, 503);
 
-console.log('Cloudflare control Worker tests passed: 10');
+const unifiedEnv = {
+  ...env,
+  PUBLIC_HOST: 'xnvgatebox.example.workers.dev',
+  CHECKER_TOKEN: 'checker-secret',
+  LEGACY_CHECKER_URL: 'https://checker.invalid/check',
+  LEGACY_EDGE_URL: 'https://edge.invalid',
+};
+response = await handleRequest(request('/health'), unifiedEnv);
+const unifiedHealth = await response.json();
+assert.equal(unifiedHealth.service, 'xnvgatebox');
+assert.deepEqual(unifiedHealth.modules, { management: true, subscription: true, checker: true, data_plane: true });
+
+const originalFetch = globalThis.fetch;
+globalThis.fetch = async (forwarded) => {
+  assert.match(forwarded.url, /^https:\/\/(checker|edge)\.invalid/);
+  return new Response('forwarded', { status: 200 });
+};
+const checkerPath = '/check?proxy=' + encodeURIComponent('sstp://vpn:vpn@public-vpn-1.opengw.net:443');
+response = await handleRequest(request(checkerPath, { headers: { authorization: 'Bearer checker-secret' } }), unifiedEnv);
+assert.equal(response.status, 200);
+const edgePath = '/?sstp=' + encodeURIComponent('vpn:vpn@public-vpn-1.opengw.net:443') + '&globalproxy=1';
+response = await handleRequest(request(edgePath, { headers: { upgrade: 'websocket' } }), unifiedEnv);
+assert.equal(response.status, 200);
+response = await handleRequest(request('/sub?token=sub-secret'), unifiedEnv);
+const unifiedLinks = atob((await response.text()).trim()).trim().split('\n');
+assert.match(unifiedLinks[0], /@xnvgatebox\.example\.workers\.dev:443\?/);
+globalThis.fetch = originalFetch;
+
+console.log('Cloudflare unified Worker tests passed');

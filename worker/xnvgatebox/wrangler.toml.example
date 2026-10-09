@@ -1,0 +1,19 @@
+name = "xnvgatebox"
+main = "worker.mjs"
+compatibility_date = "2026-10-10"
+workers_dev = true
+
+[vars]
+# This is the public host used when generating VLESS links.
+PUBLIC_HOST = "xnvgatebox.<account-subdomain>.workers.dev"
+# Migration-only upstreams. They are not exposed as user-facing endpoints.
+LEGACY_CHECKER_URL = "https://vpngate-checker.pages.dev/check"
+LEGACY_EDGE_URL = "https://vpngate-edge.pages.dev"
+
+[[kv_namespaces]]
+binding = "MANIFEST"
+id = "replace-with-the-single-manifest-kv-id"
+
+# Secrets: VLESS_UUID, ADMIN_TOKEN, SUB_TOKEN, VPN_USERNAME, VPN_PASSWORD,
+# CHECKER_TOKEN. The last one is only used while the single Worker replaces
+# the first-round checker implementation.

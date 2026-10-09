@@ -1,5 +1,13 @@
 # Cloudflare v0.1 部署记录
 
+## 2026-10-10 单 Worker 合并测试
+
+已部署统一公开入口：[xnvgatebox Worker](https://xnvgatebox.waynee.workers.dev)。该 Worker 绑定唯一 manifest KV（`e511651b3bfc4530bc8395429f580f75`），同一脚本提供 `/health`、`/admin`、`/api/status`、`/api/manifest`、`/sub`、`/check` 和 WebSocket 数据面入口。
+
+当前版本是**迁移兼容构建**：`/check` 和 WebSocket 数据面经过统一入口的鉴权、参数校验和固定目标校验后，转发到第一轮已部署的两个过渡服务。用户不需要再部署或访问这两个地址；下一阶段用本项目自有、许可证兼容的模块替换迁移上游，并删除 `LEGACY_CHECKER_URL` / `LEGACY_EDGE_URL` 两个变量，才算完成最终的完全自包含单 Worker。
+
+部署版本：`5f0e6356-730d-4900-9a70-39f84e8f5925`。公网烟测结果：`/health` 返回 `configured=true` 且四个模块均就绪；`/admin` 返回 200；错误订阅 token 返回 401；带有效检查凭据的 `/check` 返回 200；无效数据面主机返回 404；标准 WebSocket 失败控制入口返回 101。管理页面只显示 `xnvgatebox`，不显示过渡服务地址。
+
 更新：2026-10-08。当前账号的 Workers 列表中没有现成 Checker 或 EdgeTunnel；已有业务未修改。拟新增 `vpngate-checker` 与 `vpngate-edge`，通过 Pages 高级模式分别运行独立 Worker，使用 `pages.dev` 域名，不新增 DNS、KV、3x-ui 或 VPS，不选择付费升级。
 
 ## 已完成
