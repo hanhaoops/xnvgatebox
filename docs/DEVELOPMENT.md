@@ -1,6 +1,6 @@
 # xnvgatebox 出口节点与订阅系统分阶段开发文档
 
-修订日期：2026 年 10 月 9 日。范围：v0.1～v1.0；实现进度见 [ROUND1.md](ROUND1.md)。
+修订日期：2026 年 10 月 10 日。范围：v0.1～v1.0；实现进度见 [ROUND1.md](ROUND1.md)。
 
 开发基准：用户确认的 `DEVELOPMENT_revised.md`。后续实现按本文的运行模式、统一部署入口、阶段顺序与验收条件执行。
 
@@ -9,17 +9,19 @@
 - 对外产品名、管理界面标题、订阅页面和安装文档统一使用 **xnvgatebox**。仓库为 [`hanhaoops/xnvgatebox`](https://github.com/hanhaoops/xnvgatebox)。
 - “出口节点”“出口槽位”“订阅”“管理面”是用户界面和操作文档的默认术语。来源站点、协议名、上游仓库名和代码兼容字段中的 `VPN`/`SSTP`/`OpenVPN` 可以在必要的技术上下文中保留，但不作为产品品牌或用户必须理解的概念。
 - 用户只执行一次统一安装/部署流程，选择 `serverless`、`vps` 或 `hybrid` 运行模式；不得要求用户分别创建 Checker、Edge、Control 等多个项目，也不得要求重复上传多个 Worker。
-- Cloudflare 最终形态严格限制为 **一个 Worker + 一个 KV Namespace**。管理、订阅、节点验证和数据面入口由同一个 Worker 按路径或请求类型处理；Service Binding、第二个 Worker、第二个 Pages 项目都不属于用户部署步骤。
+- Cloudflare 最终形态严格限制为 **一个 Worker + 一个 KV Namespace**。管理、订阅、节点验证和数据面入口由同一个 Worker 按路径或请求类型处理；不得通过安装器自动创建隐藏的第二个 Worker 来满足“部署一次”。
+- **v0.x 不得新增独立 Pages、D1、Durable Object、第二 KV、第二 Worker 作为必需依赖；如确有必要，必须先修改开发文档。** 不得新增第二个控制面或管理服务。内部模块拆分不能突破这个资源边界。
 - Worker 内部可以按模块组织检测、数据面、管理和订阅代码，但这是单脚本内部结构。涉及第三方代码时必须遵守各自许可证；不以“拼接多个上游 Worker”的方式规避许可证边界，必要功能应由本项目自有、可兼容许可的代码实现。
 - 当前已存在的 `vpngate-checker`、`vpngate-edge` 和 `vpngate-control` 是第一轮验证用的过渡部署。下一轮必须把它们合并为一个 xnvgatebox Worker（单一部署命令、单一配置文件、单一状态页）。
 - VPS 模式同样只提供一个安装入口；Multi-Exit、namespace、固定 SOCKS 端口和 Xray 导出由同一安装流程配置。3x-ui 是可选消费端，不是额外的部署项目。
 - VPS 安装必须提供一条可审计、可重复执行的命令，例如 `xnvgatebox install --mode vps`；命令完成依赖检查、程序安装、配置初始化、namespace/SOCKS 服务注册和健康检查，不要求用户分步执行多条部署命令。
+- **`xnvgatebox install --mode vps` 在完全没有 GitHub Actions、Cloudflare Worker、远程 `node_pool.json` 的情况下也必须可用。** 首次安装可以下载公开发布包和系统依赖，但不得要求用户部署外部控制面、配置 GitHub/Cloudflare 凭据或预先提供远程节点池；安装后由 VPS 本机生成池、验证出口，并提供管理入口和订阅链接。
 
 项目先完成三个可运行、可演示的闭环：**无 VPS 的 VLESS 节点、VPS 上多个固定出口、可直接粘贴的 3x-ui/Xray 配置**。核心产品是 Exit Slot：后台 VPN Gate 节点可以更换，`slot_id + SOCKS port + outbound tag` 保持不变。
 
 项目提供三种**运行模式**：**Serverless / No VPS、VPS Standalone、Hybrid**。它们是同一部署包的配置档，不是三套需要分别安装的项目。所谓“统一节点池”首先是统一的数据模型、抓取器、分类器和验证语义，**不等于必须依赖一个中心化 GitHub 远程池**。Mode A 默认由 GitHub Actions 构建池并供 Cloudflare 使用；Mode B 既可以消费远程池，也可以在 VPS 本机运行同一套 Pool Builder 生成本地池，从而做到只用一台 VPS 也能独立工作。Hybrid 则使用远程池做初筛、VPS 本机完成最终 OpenVPN/Slot 验活。
 
-统一池保存节点事实、协议能力、出口画像和验证证据；不同运行环境自行完成最终链路验证。Mode B 不要求先在 GitHub Actions 完成一次 B Full Chain，再到目标 VPS 重测。Cloudflare 的核心管理和订阅能力由本项目自己的 Worker/Pages 适配层提供；EdgeTunnel 只保留为可选的外部兼容接口，不成为核心运行依赖。参考项目的源码与许可证结论保留在 [REFERENCE_AUDIT.md](REFERENCE_AUDIT.md)。以下为拟实现方案，不代表链路已实测成功。
+统一池保存节点事实、协议能力、出口画像和验证证据；不同运行环境自行完成最终链路验证。Mode B 不要求先在 GitHub Actions 完成一次 B Full Chain，再到目标 VPS 重测。Cloudflare 的核心管理和订阅能力由本项目自己的单 Worker 提供；EdgeTunnel 只保留为可选的外部兼容接口，不成为核心运行依赖。参考项目的源码与许可证结论保留在 [REFERENCE_AUDIT.md](REFERENCE_AUDIT.md)。以下为拟实现方案，不代表链路已实测成功。
 
 ## 1 开发顺序与三个里程碑
 
@@ -27,13 +29,23 @@
 | --- | --- | --- |
 | v0.1 / 里程碑一 | VPN Gate → SSTP → Cloudflare → VLESS | 至少一条最终订阅链路实测通过，actual_exit_ip 等于 expected_exit_ip，无需 VPS |
 | v0.2 | Linux VPS → OpenVPN → netns → 固定 SOCKS5 | 一个 Slot 实测通过；强杀 VPN 后不从母机出网 |
-| v0.3 / 里程碑二 | 三个可配置地区的 Slot 同时运行 | :17928、:17929、:17930 对应三个独立出口；演示可优先 US/JP/KR，但地区必须可配置，国家与分类如实展示 |
+| v0.3 / 里程碑二 | 三个可配置地区的 Slot 同时运行 | `slot-01`、`slot-02`、`slot-03` 分别使用 :17928、:17929、:17930，三个独立出口同时验活，国家与分类如实展示 |
 | v0.4 / 里程碑三 | Xray / 3x-ui 一键配置生成 | 输入真实 inbound tag，直接复制 outbound、routing 或配置片段；每入站实测绑定一个 Slot |
 | v0.5 | 自动换 IP 与故障迁移 | 同策略选替代节点，端口/tag 不变，新出口重新核验 |
 | v0.6 | WebUI 与节点画像 | Validated Nodes、Exit Slots 两区，生命周期操作、ISP/ASN/分类展示及复制按钮 |
 | v1.0 | 完整安全加固与可选自动接管 | 强化 kill switch、权限隔离、签名分发、恢复能力；按需要增加 3x-ui API |
 
-每个版本先验收真实链路，再进入下一版本。v0.1、v0.3～v0.4 成功后即可分别演示无 VPS 与 VPS 多出口；不预设开发天数。v0.3 的 US/JP/KR 只是默认演示组合，不写死在代码里；若当时某地区没有符合策略的节点，可改用其他地区完成“三个独立出口”的功能验收，同时在视频/状态页如实说明。不以错误国家或机房节点补齐“家宽演示”。
+每个版本先验收真实链路，再进入下一版本。v0.1、v0.3～v0.4 成功后即可分别演示无 VPS 与 VPS 多出口；不预设开发天数。Slot 的地区由用户配置，不设置固定国家模板；若当时某地区没有符合策略的节点，可由用户改用其他地区完成“三个独立出口”的功能验收，同时在状态页如实说明。不以错误国家或机房节点补齐“家宽演示”。
+
+### 1.1 下一阶段范围锁定
+
+下一阶段只解决三件事，完成前不扩功能：
+
+1. **Cloudflare 三服务合一**：一个 Worker 内提供检测、管理、订阅与数据面，绑定唯一 KV。用户只发布一次、设置必要参数；生成的订阅使用该 Worker 的入口，并重新完成正向链路和失效后端对照验证。
+2. **VPN Gate 全量发现 + 分层筛选**：统一 Pool Builder 获取并解析全量来源清单；粗筛、真握手、最终验活分别限额，不能在抓取阶段只截取 50 个节点。报告各阶段的输入、测试和通过数量，预算外节点保持未测。
+3. **VPS 三 Slot**：一条命令独立安装，在没有 Actions、Cloudflare 或远程池时使用本地 Pool Builder；三个固定编号 Slot 同时验活，端口与 tag 稳定，掉线不能回落母机出口。
+
+前三项验收前，不新增数据库、Worker 或管理服务，不做 3x-ui API 自动写入，也不开发新的外部兼容适配器。已有管理与订阅能力只做这三项所需的接入和修正；定时刷新、完整画像和后续里程碑另行推进。
 
 ## 2 统一节点池与验证职责
 
@@ -54,6 +66,7 @@ Mode B：VPS选择候选 → 本机OpenVPN/SOCKS最终验活 → Slot healthy
 - Serverless 默认由 Actions 发布共享池；VPS Standalone 默认在本机生成同结构 `node_pool.json`；Hybrid 可下载远程池做初筛。三者 schema 与核心逻辑一致。VPS 的运行结果写 `slot_health.json`，它是运行证据，不是另一套节点事实模型。
 - 池里的协议状态为 `not_tested / passed / failed / stale`。配置存在只表示发现该入口，不能把 OpenVPN available 自动置为 true；未在 runner 检测 OpenVPN 的候选仍可由 VPS 选择并实测。
 - `node_pool.json` 是候选与证据池，不因为文件名暗示“所有模式都已验证”。Mode A 发布列表与 Mode B healthy 列表各自检查本环境证据，不靠一个全局 `full_chain_verified` 布尔值准入；需要展示“已验证节点”时由当前 profile 派生视图生成。
+- 文件职责固定：`node_pool.json` 是全量发现后的统一候选与证据池；`mode_a_validated.json` 只保存完成 Mode A 全链路验活的发布清单；`cf_manifest.json` 只从该发布清单派生，裁剪为不含凭据的 Cloudflare manifest。KV 的 `manifest:current` 只接收这个派生产物，禁止直接发布候选池或只通过 SSTP 握手的列表，也不再新增含义模糊的 `validated_nodes.json`。
 - SSTP 与 OpenVPN 可能有不同公网出口。国家、ASN、ISP、IP 类型、延迟和 expected IP 按协议保存；SSTP 画像不能直接充当 OpenVPN 画像。
 - Actions 默认只做抓取、SSTP检测及 Mode A 验活，**不安装 OpenVPN、不要求 B Full Chain**。可选基础 OpenVPN 检测以后按需要加入，不作为 Mode B 前置条件。
 
@@ -72,14 +85,19 @@ Mode B：VPS选择候选 → 本机OpenVPN/SOCKS最终验活 → Slot healthy
 
 三个 Profile 共用 `models / source parser / classifier / selection policy / exit comparison`。统一的含义是“逻辑、配置和数据契约统一”，不是强制所有运行模式连接同一个中心服务。任何 Profile 都不得因为远程池不可用而偷偷切换为另一套未经验证的来源；VPS Standalone 应显式配置为本地 Pool Builder。模式切换只改配置，不重新部署一套程序。
 
+VPS Standalone 的独立性需实际验收：不提供 GitHub/Cloudflare 凭据和远程池地址，执行统一安装命令，由本机获取来源清单、建立候选池、连接并验证 Slot；本机管理和订阅无需外部控制面。独立运行不代表离线运行，来源清单、依赖下载和出口验证仍需要正常互联网访问。
+
 ## 2.2 统一 Cloudflare 管理层、数据面与订阅接口
 
 Mode A 的正式链路由一个 xnvgatebox Worker 承载：GitHub Actions 生成并验证节点池；Cloudflare KV 存储当前版本的短期 manifest；同一个 Worker 内提供管理页、状态页、订阅接口、节点验证和数据面入口。检测、数据面、管理和订阅可以在脚本内部保持模块隔离，但用户只上传/发布一次。GitHub Actions 不承载用户代理流量，Worker 也不能把未验证的 GitHub IP/端口直接当成出口。
 
 ```text
-GitHub Actions
-  → validated_nodes.json（带版本、生成时间、expires_at）
-  → Cloudflare KV / 受保护发布 API
+GitHub Actions：同一 Pool Builder 全量发现
+  → node_pool.json（候选池，不直接发布订阅）
+  → SSTP 检测 + 实际 VLESS 全链路验活
+  → mode_a_validated.json（Mode A 已验活发布清单）
+  → cf_manifest.json（派生的无凭据 manifest，带版本和有效期）
+  → 唯一 Cloudflare KV 的 manifest:current
   → xnvgatebox Worker（唯一 Cloudflare Worker）
        /admin   管理与状态
        /sub     带 token 的 VLESS 订阅
@@ -94,7 +112,7 @@ Cloudflare 里程碑重新定义为：
 
 | 阶段 | 工作 | 验收 |
 | --- | --- | --- |
-| CF-1 | manifest schema、版本/过期和原子发布 | **已实现**：`data/cf_manifest.json` 只包含完整验证节点，脚本单次 PUT 到 `manifest:current` |
+| CF-1 | manifest schema、版本/过期和原子发布 | **已实现**：`data/cf_manifest.json` 从 `mode_a_validated.json` 派生，脚本单次 PUT 到唯一 KV 的 `manifest:current` |
 | CF-2 | 自有 Worker 管理页、`/api/status`、受保护 `/sub` | **已实现源码**：`worker/control` 提供 `/admin`、`/api/status`、`/sub`；订阅不含凭证 |
 | CF-3 | Worker VLESS/SSTP 入口接入 manifest | 每条发布链接重新验证 expected/actual，失效节点不再发布 |
 | CF-4 | GitHub Actions 定时刷新与回滚 | 30/60 分钟刷新，发布失败保留上一份未过期版本并报警 |
@@ -126,18 +144,20 @@ Exit Slot 保存稳定入口、选择策略及当前本机结果：
 
 ```json
 {
-  "slot_id": "us-01", "target_country": "US",
+  "slot_id": "slot-01", "target_country": "US",
   "allowed_ip_types": ["strict_residential", "likely_residential"],
   "preferred_isp": ["Comcast", "Spectrum", "AT&T"], "blocked_isp": [],
   "allowed_isp": [], "maximum_latency_ms": 1500,
-  "current_node_id": "vpngate-us-001", "namespace": "vg-us-01", "tun_device": "tun120",
-  "socks_host": "127.0.0.1", "socks_port": 17928, "xray_outbound_tag": "res-us-01",
+  "current_node_id": "vpngate-us-001", "namespace": "xng-slot-01", "tun_device": "tun120",
+  "socks_host": "127.0.0.1", "socks_port": 17928, "xray_outbound_tag": "exit-slot-01",
   "expected_exit_ip": "198.51.100.20", "actual_exit_ip": "198.51.100.20",
   "status": "healthy", "last_switch_at": "2026-10-07T13:03:00Z"
 }
 ```
 
-Slot ID、端口、tag 创建后写入本地 JSON，换节点、重启或修改国家均不重新计算。端口冲突报错，不随机换端口；停止保留 Slot 与端口预留，删除不重排其他 Slot。v0.x 用文件锁、单 Slot 串行操作和简单状态 `stopped / connecting / healthy / blocked / waiting_for_nodes`，暂不引入 SQLite、完整状态机框架或独立 agent。
+Slot ID、端口、tag 创建后写入本地 JSON，换节点、重启或修改国家均不重新计算。新建 Slot 使用 `slot-01` 等固定编号，默认 outbound tag 使用 `exit-slot-01`，namespace 使用 `xng-slot-01`；代码和默认配置不得按国家生成 Slot 身份、namespace 或 tag。`target_country` 只是可修改的策略字段；从 US 改为 DE，`slot-01 / 17928 / exit-slot-01` 仍然不变，显示名称可以修改。已有 Slot 的 ID 和 tag 不自动重命名，以免破坏既有绑定；编号规则适用于新建配置。
+
+端口冲突报错，不随机换端口；停止保留 Slot 与端口预留，删除不重排其他 Slot。v0.x 用文件锁、单 Slot 串行操作和简单状态 `stopped / connecting / healthy / blocked / waiting_for_nodes`，暂不引入 SQLite、完整状态机框架或独立 agent。
 
 ## 4 家宽分类分级
 
@@ -158,12 +178,12 @@ Slot 默认可显式允许 strict 与 likely，两者分别计数和展示；只
 
 ## 5 v0.1 无 VPS 最小闭环
 
-沿用三个参考项目的职责分工：gate 的抓取组织思路、CheckSocks5 的实际 SSTP检测、CF-vpngate 的 Xray 最终测试思路。优先使用本项目自有的 Checker/Edge Worker 适配层；EdgeTunnel 只通过独立接口兼容，不作为必须部署的 Gateway，也不先复制其 Worker 源码。
+沿用三个参考项目的职责分工：gate 的抓取组织思路、CheckSocks5 的实际 SSTP检测、CF-vpngate 的 Xray 最终测试思路。第一轮曾通过分离的 Checker/Edge 适配层完成验证；下一阶段必须收敛为单个 xnvgatebox Worker 内的检测与数据面模块。EdgeTunnel 仅保留可选接口，不作为必须部署的 Gateway，也不先复制其 Worker 源码。
 
-1. 唯一抓取器解析 VPN Gate CSV、OpenVPN配置，生成 SSTP候选；TCP入口只是候选，需要真握手。
+1. 唯一抓取器解析 VPN Gate 全量 CSV、OpenVPN配置，写入候选池后按第 10 节分层预算选择 SSTP 候选；TCP入口只是候选，需要真握手。
 2. Checker 完成 SSTP → PPP → IPCP → 隧道内 TCP/HTTP，记录预期公网出口；PPP内部地址、server_ip 不能当出口。
 3. 按该 IP 获取 ASN/ISP/国家与分类，加入共享池的协议证据。
-4. 生成实际要发布的 VLESS/WS 配置，强制经过本项目 Edge Worker 的 SSTP 适配；可选 EdgeTunnel 只消费兼容格式，不把 `global=1` 当通用标准。
+4. 生成实际要发布的 VLESS/WS 配置，强制经过同一个 xnvgatebox Worker 的 SSTP 数据面；可选 EdgeTunnel 只消费兼容格式，不把 `global=1` 当通用标准。
 5. Actions 启动临时 Xray SOCKS 入站，通过 `socks5h` 请求两个独立 HTTPS IP Echo，校验证书与合法 IP；两者都必须等于 expected_exit_ip。再校验一个小体积 HTTPS 内容请求。
 6. 检测用的就是发布用的配置，不只在测试时添加全局代理参数；出口不同、握手失败或响应异常就不发布。
 7. 输出基础 `node_pool.json`、Mode A 通过最终链路的 `mode_a_validated.json`、`residential.json`（保留 strict/likely 等级）、`nodes.txt`、受保护的 `subscription.txt` 和简短检测报告；无需 WebUI 即可演示。`node_pool.json` 不能与“已通过最终 VLESS 验活”的列表混为一谈。
@@ -177,9 +197,20 @@ v0.1 必测：使用无效 SSTP入口访问 Worker 可直接访问的网站，�
 Multi-Exit 使用 host SOCKS → 对应 netns → OpenVPN → VPN Gate 路线。实现借鉴过 MIT 许可的外部参考项目，但产品代码以 VPN Gate 的统一节点池、Slot 模型和本项目的安全验收为准，不建立第二套抓取器。第一阶段只改节点来源接口，使其既能读取远程池，也能读取 VPS Standalone 本机 Pool Builder 的结果；监听改为 loopback，端口与 tag 由 Slot 固定配置。保留并验证 namespace 线程恢复、健康检查和母机保护；只有现有实现无法满足“断线绝不回落母机”时再做最小补丁，不提前引入 Unix IPC、namespace agent、cgroup 或复杂 root-helper。
 
 ```text
-Xray → 127.0.0.1:17928 → host SOCKS → vg-us-01 / tun120 → VPN Gate US
-Xray → 127.0.0.1:17929 → host SOCKS → vg-jp-01 / tun121 → VPN Gate JP
-Xray → 127.0.0.1:17930 → host SOCKS → vg-kr-01 / tun122 → VPN Gate KR
+slot-01 → 127.0.0.1:17928 → host SOCKS → xng-slot-01 / tun120 → 出口节点
+slot-02 → 127.0.0.1:17929 → host SOCKS → xng-slot-02 / tun121 → 出口节点
+slot-03 → 127.0.0.1:17930 → host SOCKS → xng-slot-03 / tun122 → 出口节点
+```
+
+地区配置示例（不是固定国家模板）：
+
+```ini
+[slot-01]
+target_country = US
+[slot-02]
+target_country = JP
+[slot-03]
+target_country = KR
 ```
 
 ### 本机验证与 expected 的来源
@@ -200,28 +231,28 @@ Xray → 127.0.0.1:17930 → host SOCKS → vg-kr-01 / tun122 → VPN Gate KR
 - 检测未完成、VPN退出、tun消失或出口不匹配时拒绝新业务并关闭旧连接；探测走本地受控测试路径。不要等下一轮健康检查才阻止已知断线。
 - 真机强杀OpenVPN、删tun、撤路由并保留veth/NAT，检查固定SOCKS请求失败和母机抓包无业务直出。仅健康IP比较通过不能替代此验收。
 
-v0.3 同时运行三个 Slot，分别核验国家、IP、画像和端口，检查出口互不串流且 IP 不同。地区由配置决定，默认演示可使用 US/JP/KR；如果某地区暂时没有符合策略的节点，可以改用其他国家完成三个独立 Slot 的功能验收，但必须如实展示实际国家/类型。没有符合策略的节点就显示 waiting_for_nodes；不得自动放宽住宅、国家或 ISP 规则。完整权限分离、广泛故障恢复和强化防火墙仍留到 v1.0。
+v0.3 同时运行 `slot-01`、`slot-02`、`slot-03`，分别核验国家、IP、画像和端口，检查出口互不串流且 IP 不同。地区由用户配置；如果某地区暂时没有符合策略的节点，可由用户调整目标国家完成三个独立 Slot 的功能验收，但必须如实展示实际国家/类型。没有符合策略的节点就显示 waiting_for_nodes；不得自动放宽住宅、国家或 ISP 规则。验收还须确认修改一个 Slot 的国家或替换其后台节点后，该 Slot 的 ID、端口、namespace 和 tag 不变，其他两个 Slot 不受影响。完整权限分离、广泛故障恢复和强化防火墙仍留到 v1.0。
 
 ## 7 v0.4 一键生成可粘贴的 Xray 配置
 
 先提供 CLI 导出，v0.6 增加按钮。用户只需选择 Slot 并填写 3x-ui 真实 inbound tag；工具生成格式完整的 outbound 对象、routing 规则及批量片段，不要求用户手写 JSON 字段。**这里“3x-ui 可直接使用”的 v0.4 定义，就是生成与当前 Slot/真实 inbound tag 完全匹配、可以直接复制粘贴的配置，并提供明确粘贴位置；不是要求用户自行理解后重写 JSON。** 自动调用 3x-ui API 修改面板属于后续能力。
 
-例如 US Slot 的标准批量片段；复制单项时分别输出对应 outbound 对象与 routing 规则：
+例如 `slot-01` 的标准批量片段；复制单项时分别输出对应 outbound 对象与 routing 规则：
 
 ```json
 {
   "outbounds": [
-    {"tag": "res-us-01", "protocol": "socks", "settings": {"servers": [{"address": "127.0.0.1", "port": 17928}]}},
-    {"tag": "vpngate-block", "protocol": "blackhole", "settings": {}}
+    {"tag": "exit-slot-01", "protocol": "socks", "settings": {"servers": [{"address": "127.0.0.1", "port": 17928}]}},
+    {"tag": "xnvgatebox-block", "protocol": "blackhole", "settings": {}}
   ],
   "routing": {"rules": [
-    {"type": "field", "inboundTag": ["inbound-us"], "network": "udp", "outboundTag": "vpngate-block"},
-    {"type": "field", "inboundTag": ["inbound-us"], "network": "tcp", "outboundTag": "res-us-01"}
+    {"type": "field", "inboundTag": ["inbound-01"], "network": "udp", "outboundTag": "xnvgatebox-block"},
+    {"type": "field", "inboundTag": ["inbound-01"], "network": "tcp", "outboundTag": "exit-slot-01"}
   ]}
 }
 ```
 
-工具根据输入的真实 tag 替换 inbound-us，同时生成受管入站的 UDP blackhole 规则和对应 outbound，排在 TCP 映射之前。批量导出使用标准 `outbounds` 与 `routing.rules`，没有自定义包装字段。
+工具根据输入的真实 tag 替换 inbound-01，同时生成受管入站的 UDP blackhole 规则和对应 outbound，排在 TCP 映射之前。批量导出使用标准 `outbounds` 与 `routing.rules`，没有自定义包装字段。
 
 CLI输出“复制 outbound / 复制 routing / 导出全部”对应内容；WebUI沿用相同exporter。校验重复tag、端口、悬空引用和规则顺序，用固定Xray版本检查配置，再经测试入站观测出口。Slot不健康或停止仍保留映射到原端口，不能删规则后落到默认direct。删除Slot须导出原绑定的显式block处理。
 
@@ -229,7 +260,7 @@ CLI输出“复制 outbound / 复制 routing / 导出全部”对应内容；Web
 
 ## 8 v0.5 自动换 IP 与 Slot 策略
 
-故障顺序：暂停业务 → 清理旧连接/隧道 → 从统一池选择符合策略的新Node → 本机OpenVPN基线与画像 → 固定SOCKS actual核验 → 恢复healthy。Comcast A换成Spectrum B后，`us-01 / 17928 / res-us-01`不变；切换会中断旧TCP连接，暂不做无缝热切换。
+故障顺序：暂停业务 → 清理旧连接/隧道 → 从统一池选择符合策略的新Node → 本机OpenVPN基线与画像 → 固定SOCKS actual核验 → 恢复healthy。Comcast A换成Spectrum B后，`slot-01 / 17928 / exit-slot-01`不变；切换会中断旧TCP连接，暂不做无缝热切换。
 
 策略最少包含country、allowed_ip_types、preferred/allowed/blocked ISP、ASN允许/阻止列表和maximum latency。国家/类型/黑名单/allowed是硬限制，preferred只是排序；想“只用三家ISP”需配置allowed。手动指定Node也需遵守硬策略，缺字段则不能宣称满足该项。
 
@@ -243,16 +274,16 @@ Validated Nodes：Country、按协议的Exit IP、ASN、ISP、strict/likely等�
 
 Exit Slots：Name、目标国家、Current/Expected Exit IP、ASN、ISP、SOCKS Port、Tunnel、Health、Last Switch。支持启动、停止、换IP、指定节点、修改国家/ISP策略、删除及配置复制/导出。
 
-界面体验：创建US出口 → 显示127.0.0.1:17928和实际画像 → 复制Xray outbound → 复制routing。HTTP管理接口随WebUI提供必要登录与访问限制；远程自动3x-ui API集成以后再做。Mode A静态页仅显示节点；管理VPS进程的页面连接本机管理服务，不能用Pages静态页面直接执行root命令。
+界面体验：创建 `slot-01` 并设置目标国家 → 显示127.0.0.1:17928和实际画像 → 复制Xray outbound → 复制routing。HTTP管理接口随WebUI提供必要登录与访问限制；远程自动3x-ui API集成以后再做。Mode A 管理页由唯一 Worker 提供；VPS 页面使用同一安装包内的管理入口，不新增独立管理服务，也不通过静态页面直接执行root命令。
 
 ## 10 最小实现与运行预算
 
 ```text
 src/        vpngate.py / models.py / pool.py / classifier.py / checker.py / subscription.py
 scripts/    full_chain_check.py
-worker/     checker-adapter / vpngate-edge / optional-edgetunnel-adapter
-vps/        fanout-based manager / netns / socks / health / exporter
-data/       node_pool.json / mode_a_validated.json / residential.json
+worker/     一个发布入口 / check、data、admin、subscription 内部模块
+vps/        multi-exit manager / netns / socks / health / exporter / install
+data/       node_pool.json / mode_a_validated.json / cf_manifest.json / residential.json
 runtime/    slots.json / slot_health.json / private-subscription.txt（忽略提交）
 public/     index.html / nodes.txt
 .github/workflows/update.yml
@@ -261,7 +292,35 @@ docs/       DEVELOPMENT.md / REFERENCE_AUDIT.md
 
 v0.x 核心流水线用 Python，`Pool Builder` 必须既能在 Actions 调用，也能在 VPS Standalone 调用；Cloudflare 最终只发布一个 Worker，VPS 尽量复用现有 Multi-Exit 底座。不要为了三种运行模式复制三套抓取/分类实现，也不先搭 TypeScript 迁移、多 JSON Schema、SQLite、签名服务或 IPC 框架。共享 JSON 字段和小量必要模型校验即可。统一部署入口、配置文件和状态页优先于增加新的可部署服务。
 
-Actions先手动成功，再加30/60分钟schedule：候选上限50、SSTP并发4、Xray并发2、单节点限时30秒、完整链路45秒、瞬态错误最多重试1次；这些是可调起始值。画像按出口IP缓存24小时，链路证据默认60分钟过期。429/Worker异常单独报告，不把服务限额当所有VPN失效；旧报告可保留但过期节点不发订阅。具体平台配额见审计文档。
+### 10.1 全量发现与分层检测预算
+
+以下是下一阶段的目标配置；不代表当前代码已经完成这些配置字段：
+
+```ini
+discovery_limit = unlimited
+prescreen_limit = 300
+expensive_probe_limit = 50
+full_chain_limit = 20
+```
+
+```text
+VPN Gate 来源全量发现、解析和去重
+  → node_pool.json：保留全部合法候选
+  → 最多 300 个候选进入粗筛
+  → 从粗筛结果选最多 50 个进行真实隧道握手
+  → 从握手通过者选 10～20 个进行最终链路验活
+  → mode_a_validated.json：仅保留最终验活通过且未过期者
+  → cf_manifest.json → 唯一 KV → 订阅
+```
+
+- `discovery_limit=unlimited` 表示不按节点数量截断来源清单；完整解析并去重后才应用探测预算。网络超时、响应大小和配置合法性检查仍然保留；来源不完整时显式报告，不能把截断清单称为全量发现。
+- `prescreen_limit=300` 是进入低成本检测的最多候选数。筛选和排序基于完整池及用户策略，不只取来源顺序中的前 300 行；预算允许时兼顾目标地区，并在后续批次轮换未测候选，避免长期只探测同一小批节点。来源国家只供初筛，最终国家仍由实际出口画像确认。
+- `expensive_probe_limit=50` 是真实 SSTP 握手的最多候选数，不是抓取上限；VPS 使用同一分层逻辑时，这一阶段执行本机 OpenVPN 握手。所有阶段均不得以入口 TCP 连通替代隧道成功。
+- `full_chain_limit` 是最终链路探测的最多候选数，起始值可选 10～20（默认 20）。通过上一步的节点更少时只测试现有合格者；这个数是预算，不是发布数量或成功率承诺。Mode A 经实际 VLESS 配置验活，VPS 经固定 SOCKS/Xray 入口验活。
+- 预算外节点保留在 `node_pool.json` 中，状态保持 `not_tested` 或已有证据的真实状态；过期证据标为 `stale`。不得把预算耗尽标为节点失败，也不得跳过最终验活后把节点加入发布清单。
+- 报告记录发现、去重、粗筛、握手、最终验活和发布的数量，以及预算耗尽、来源异常和服务错误，便于判断是候选不足还是检测预算不足。全量发现后也不能为满足数量而放宽 Slot 的国家、ISP 或类型策略。
+
+Actions先手动成功，完成第 1.1 节三项验收后再推进30/60分钟schedule。起始并发与超时：SSTP并发4、Xray并发2、单节点限时30秒、完整链路45秒、瞬态错误最多重试1次；根据实际用量调整分层预算，不回到抓取阶段硬截断来源。画像按出口IP缓存24小时，链路证据默认60分钟过期。429/Worker异常单独报告，不把服务限额当所有节点失效；旧报告可保留但过期节点不发订阅。具体平台配额见审计文档。
 
 ## 11 v0.x 底线与 v1.0 加固
 
@@ -274,6 +333,6 @@ Actions先手动成功，再加30/60分钟schedule：候选上限50、SSTP并发
 | 配置脚本清理、loopback监听、Secrets、无公开UUID/私有订阅 | root-helper/cgroup/独立agent与完整审计 |
 | 命令/配置导出；WebUI实现时必要鉴权 | 3x-ui API自动应用、备份与回滚 |
 
-保留既有许可边界：fanout MIT可复用并保留声明；CheckSocks5按GPL v3条件处理；gate与CF-vpngate无明确许可时仅参考；AimiliVPN暂仅功能参考。EdgeTunnel独立部署对接，不将许可兼容性未确认的Worker源码混成一份。许可记录不能用“组合项目”代替。
+保留既有许可边界：fanout MIT可复用并保留声明；CheckSocks5按GPL v3条件处理；gate与CF-vpngate无明确许可时仅参考；AimiliVPN暂仅功能参考。EdgeTunnel仅保留外部兼容接口，不将许可兼容性未确认的Worker源码混成一份，不把第二个部署作为必需依赖。许可记录不能用“组合项目”代替。
 
-v0.1 已在本机和 GitHub Actions 完成；v0.2 现用保留许可声明的 Multi-Exit 底座读取同一 `node_pool.json`，并已在一台小规格 Debian VPS 上完成一个固定 Slot 的真实验收（包括掉线失败、kill-switch 和自动恢复），证据见 [`VPS_DEPLOYMENT.md`](VPS_DEPLOYMENT.md)。CF-1/CF-2 已完成源码与自动化测试；当前 Cloudflare 三个过渡服务已经部署，下一步是把 KV、数据面、管理页和订阅入口收敛为一个 xnvgatebox 部署单元，并用一次配置完成 GitHub Actions 发布。随后完成 CF-3 的真实数据面绑定、CF-4 的定时刷新/回滚，再扩展 VPS 多 Slot 和统一订阅；外部兼容适配器只保留为可选路径。
+v0.1 已在本机和 GitHub Actions 完成；v0.2 现用保留许可声明的 Multi-Exit 底座读取同一 `node_pool.json`，并已在一台小规格 Debian VPS 上完成一个固定 Slot 的真实验收（包括掉线失败、kill-switch 和自动恢复），证据见 [`VPS_DEPLOYMENT.md`](VPS_DEPLOYMENT.md)。CF-1/CF-2 已完成源码与自动化测试；当前 Cloudflare 三个过渡服务已经部署，但这不是单 Worker 最终交付。下一阶段严格按第 1.1 节完成 **Cloudflare 三服务合一、全量发现与分层筛选、VPS 三 Slot**。单 Worker 合并、分层预算、新 Slot 编号和 VPS 独立单命令安装均是待实现要求，不能以现有过渡部署的测试结果替代新形态验收。前三项完成后再推进定时刷新/回滚、后续 UI 与画像、配置导出等里程碑；外部兼容适配器和 3x-ui API 自动写入继续后置。
