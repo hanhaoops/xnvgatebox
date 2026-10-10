@@ -39,11 +39,11 @@ jobs:
       - name: Verify the actual Cloudflare VLESS chain
         if: inputs.profile == 'serverless' || github.event_name == 'schedule'
         env:
-          CHECKER_URL: ${{ secrets.CHECKER_URL }}
+          CHECKER_URL: https://xnvgatebox.waynee.workers.dev/check
           CHECKER_TOKEN: ${{ secrets.CHECKER_TOKEN }}
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
-          EDGETUNNEL_HOST: ${{ secrets.EDGETUNNEL_HOST }}
+          EDGETUNNEL_HOST: xnvgatebox.waynee.workers.dev
           VLESS_UUID: ${{ secrets.VLESS_UUID }}
           VPN_USERNAME: ${{ secrets.VPN_USERNAME || 'vpn' }}
           VPN_PASSWORD: ${{ secrets.VPN_PASSWORD || 'vpn' }}

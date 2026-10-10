@@ -14,7 +14,7 @@ python3 scripts/toolbox.py pool
 
 无需 Cloudflare、UUID 或远程节点池地址即可生成 `data/node_pool.json`、对应 SHA256 和 `data/configs/*.ovpn`。OpenVPN 配置不执行，协议状态保持 `not_tested`；本命令是后续 VPS Standalone 使用的同一个 Builder。可用 `--csv-file /absolute/path/vpngate.csv` 解析官方格式快照。国家过滤、候选预算等在 `config/settings.json` 修改。
 
-开始 Mode A 前，部署你自己的 Checker 和一个已完成全链路验活的数据面 Worker，按 [Worker 适配说明](worker/README.md) 核对接口。项目自己的管理/订阅 Worker 见 [`worker/control`](worker/control/)，可选的 EdgeTunnel 适配器只用于兼容已有数据面。复制 `.env.example` 为 `.env`，设置 `CHECKER_URL`、数据面域名和 `VLESS_UUID`。可选访问控制与画像参数也在此文件；工具读取 `.env`，不执行其中任何 shell 表达式。
+开始 Mode A 前，部署一次 xnvgatebox Worker；它提供管理、检查、数据面和订阅入口。按 [Worker 适配说明](worker/README.md) 核对统一入口，复制 `.env.example` 为 `.env`，设置 `VLESS_UUID` 和必要的凭据。可选访问控制与画像参数也在此文件；工具读取 `.env`，不执行其中任何 shell 表达式。
 
 ```sh
 python3 scripts/install_xray.py
