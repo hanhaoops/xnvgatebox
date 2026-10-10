@@ -75,7 +75,12 @@ def main(argv=None):
                     clear_publication(args.output, args.runtime, "configuration_error")
                     write_json(args.output / "report.json", {"status": "configuration_error", "failure_code": str(exc), "generated_at": utc_now()})
                     raise
-                print(json.dumps({key: report[key] for key in ("status", "published")}))
+                # Keep the concise status line used by Actions, but include the
+                # actionable failure code so a failed run can be diagnosed from
+                # the job log without downloading the private evidence artifact.
+                print(json.dumps({key: report.get(key) for key in
+                                  ("status", "published", "failure_code", "candidates",
+                                   "sstp_passed", "checker_service_errors")}))
                 return 0 if report["status"] == "passed" else 3
             view = json.loads(args.view.read_text())
             # Export from downloaded public evidence without rerunning a different config.
