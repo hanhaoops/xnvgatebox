@@ -41,18 +41,18 @@ python3 scripts/toolbox.py mode-a
 
 ## GitHub Actions
 
-工作流 [update.yml](.github/workflows/update.yml) 默认手动触发：
+工作流 [update.yml](.github/workflows/update.yml) 支持手动触发，并默认每小时自动刷新：
 
 - `pool-only`：无需任何 Cloudflare Secrets，构建共享候选池。
 - `serverless`：设置与 `.env.example` 同名的仓库 Secrets 后执行实际链路检查；可选打开 `publish_cf` 将 `data/cf_manifest.json` 发布到自有 control Worker 的 KV。
 
-公开 artifact 只包括池、配置数据、验活证据、`cf_manifest.json` 和报告，不包含 `.env` 或订阅。成功后下载 `mode_a_validated.json` 等证据到 `data/`，在本机使用相同数据面/UUID 和配置生成私有订阅：
+定时运行使用 `serverless` 链路并自动发布 Cloudflare manifest；手动运行仍可选择 `pool-only` 或 `serverless`，并可显式打开 `publish_cf`。公开 artifact 只包括池、配置数据、验活证据、`cf_manifest.json` 和报告，不包含 `.env` 或订阅。成功后下载 `mode_a_validated.json` 等证据到 `data/`，在本机使用相同数据面/UUID 和配置生成私有订阅：
 
 ```sh
 python3 scripts/toolbox.py export-subscription
 ```
 
-导出会重新比较订阅配置摘要、最终 IP 与有效期，拒绝用不同 UUID/域名/路径拼接旧验证结果。只信任你自己的证据来源；SHA256 是内容校验，不是发布者签名。Cloudflare KV 发布和 control Worker 部署需要按 [`worker/control/README.md`](worker/control/README.md) 配置；小时调度仍保持注释状态，启用前应先决定 Actions 用量和证据刷新策略，调度延误需由证据有效期处理。
+导出会重新比较订阅配置摘要、最终 IP 与有效期，拒绝用不同 UUID/域名/路径拼接旧验证结果。只信任你自己的证据来源；SHA256 是内容校验，不是发布者签名。Cloudflare KV 发布和 control Worker 部署需要按 [`worker/control/README.md`](worker/control/README.md) 配置；定时任务可能延迟数分钟，manifest 通过有效期拒绝过期订阅，必要时仍可从 Actions 页面手动运行。
 
 ## 验证
 

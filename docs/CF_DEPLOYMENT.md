@@ -84,3 +84,5 @@ v0.1 的“至少一条实际订阅链路、expected=actual、无需 VPS”完�
 2026-10-10，提交 `fb1c378` 的 `serverless` 手动运行 [Build node pool / verify Mode A #3](https://github.com/hanhaoops/xnvgatebox/actions/runs/38010061610) 成功，耗时 5 分 8 秒。实际 Cloudflare VLESS 链路验证返回 `{"status":"passed","published":21}`，并生成 `node-pool-and-evidence` 公开 artifact（295 KB）。本次运行将 `CHECKER_URL` 和数据面主机都指向统一 `xnvgatebox.waynee.workers.dev`，证明 GitHub Actions 已不再依赖用户单独部署的两个公开入口。
 
 本次运行的 `publish_cf` 保持关闭，因此 KV 没有被写入，Worker 的 `/health` 仍会显示 `manifest_ready=false`；这是预期的发布前验证状态。要让 `/sub` 返回真实订阅，还需配置 GitHub Secrets `CF_API_TOKEN`、`CF_ACCOUNT_ID` 和 `CF_KV_NAMESPACE_ID` 后，再以 `serverless + publish_cf=true` 运行一次。
+
+随后已将统一 Worker 的 `/check` 响应补齐 `type=sstp` 协议标记，并在 `.github/workflows/update.yml` 启用每小时自动刷新；定时运行会自动使用 `serverless` 并发布 manifest，手动运行仍可用于立即刷新或诊断。Worker 当前 `/health` 已确认 `configured=true`；在首次成功发布前 `manifest_ready=false` 属于正常状态。若某轮候选全部失效，Actions 会报告 `no_sstp_passed_nodes` 并保留失败原因，不会发布过期或未经验证的节点。
