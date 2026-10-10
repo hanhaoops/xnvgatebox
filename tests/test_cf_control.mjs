@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { handleRequest } from '../worker/control/worker.mjs';
+import { parseVless } from '../worker/control/selfhosted_edge.mjs';
 
 const future = new Date(Date.now() + 3600_000).toISOString();
 const manifest = {
@@ -24,6 +25,17 @@ const env = {
 };
 const request = (path, init = {}) => new Request('https://control.example.com' + path, init);
 const auth = { authorization: 'Bearer admin-secret' };
+
+const vlessHead = new Uint8Array(26);
+vlessHead[0] = 1;
+vlessHead.set('12345678123441238123123456789abc'.match(/../g).map(x => Number.parseInt(x, 16)), 1);
+vlessHead[17] = 0;
+vlessHead[18] = 1;
+vlessHead[19] = 0x01;
+vlessHead[20] = 0xbb;
+vlessHead[21] = 1;
+vlessHead.set([93, 184, 216, 34], 22);
+assert.deepEqual(parseVless(vlessHead, env.VLESS_UUID), { version: 1, host: '93.184.216.34', port: 443, initial: new Uint8Array(0) });
 
 let response = await handleRequest(request('/health'), env);
 assert.equal(response.status, 200);
@@ -61,28 +73,22 @@ const unifiedEnv = {
   ...env,
   PUBLIC_HOST: 'xnvgatebox.example.workers.dev',
   CHECKER_TOKEN: 'checker-secret',
-  LEGACY_CHECKER_URL: 'https://checker.invalid/check',
-  LEGACY_EDGE_URL: 'https://edge.invalid',
+  __checkSstp: async proxy => ({ exitIp: '73.1.1.1', assignedIp: '10.0.0.2', proxy }),
+  __handleVlessWebSocket: async () => new Response('self-hosted', { status: 200 }),
 };
 response = await handleRequest(request('/health'), unifiedEnv);
 const unifiedHealth = await response.json();
 assert.equal(unifiedHealth.service, 'xnvgatebox');
 assert.deepEqual(unifiedHealth.modules, { management: true, subscription: true, checker: true, data_plane: true });
 
-const originalFetch = globalThis.fetch;
-globalThis.fetch = async (forwarded) => {
-  assert.match(forwarded.url, /^https:\/\/(checker|edge)\.invalid/);
-  return new Response('forwarded', { status: 200 });
-};
 const checkerPath = '/check?proxy=' + encodeURIComponent('sstp://vpn:vpn@public-vpn-1.opengw.net:443');
 response = await handleRequest(request(checkerPath, { headers: { authorization: 'Bearer checker-secret' } }), unifiedEnv);
 assert.equal(response.status, 200);
+assert.equal((await response.json()).exit.ip, '73.1.1.1');
 const edgePath = '/?sstp=' + encodeURIComponent('vpn:vpn@public-vpn-1.opengw.net:443') + '&globalproxy=1';
 response = await handleRequest(request(edgePath, { headers: { upgrade: 'websocket' } }), unifiedEnv);
 assert.equal(response.status, 200);
 response = await handleRequest(request('/sub?token=sub-secret'), unifiedEnv);
 const unifiedLinks = atob((await response.text()).trim()).trim().split('\n');
 assert.match(unifiedLinks[0], /@xnvgatebox\.example\.workers\.dev:443\?/);
-globalThis.fetch = originalFetch;
-
 console.log('Cloudflare unified Worker tests passed');

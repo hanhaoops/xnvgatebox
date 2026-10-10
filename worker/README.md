@@ -1,8 +1,8 @@
 # 第一轮 Worker 适配与部署准备
 
-第一轮通过 HTTP/VLESS 对接两个独立 Worker。2026-10-08 确认原账号没有现成 Checker/EdgeTunnel 后，增加可复现部署准备。用户授权后已创建两个过渡 Pages Worker、配置认证并部署；至少一条真实正向链路和失效后端对照通过，正式批次记录见 [CF_DEPLOYMENT.md](../docs/CF_DEPLOYMENT.md)。现在统一入口 [`xnvgatebox/`](xnvgatebox/) 已部署，用于把管理、订阅、检查和数据面收敛到一个公开 Worker；两个旧 Worker 仅作为迁移上游，最终应删除。
+第一轮曾通过 HTTP/VLESS 对接两个独立 Worker。现在统一入口 [`xnvgatebox/`](xnvgatebox/) 已改为自包含部署：管理、订阅、节点检查和 TCP-only 数据面都在同一个 Worker 中运行，只绑定一个 KV Namespace，不依赖旧 Worker。
 
-项目自己的管理、订阅与统一入口路由在 [`control/`](control/)，公开发布入口在 [`xnvgatebox/`](xnvgatebox/)。它读取统一验证池的 KV manifest，提供管理页、受保护订阅、检查入口和数据面 WebSocket 入口。迁移阶段只转发到固定旧地址；EdgeTunnel 不是长期控制面依赖，单 Worker 的自有数据面替换属于 CF-3。
+项目自己的管理、订阅、检查与统一入口路由在 [`control/`](control/)，公开发布入口在 [`xnvgatebox/`](xnvgatebox/)。它读取统一验证池的 KV manifest，提供管理页、受保护订阅、SSTP 出口检查和数据面 WebSocket 入口。
 
 执行 `python3 scripts/prepare_workers.py` 从固定提交下载并校验源文件和完整许可证；或通过 `--source-cache` 读取已审计文件。生成目录是忽略的 `runtime/deploy/checker`、`runtime/deploy/edge`，各自包括 `worker.mjs`、`upstream.mjs`、`LICENSE`、`SOURCE.json` 和 `wrangler.toml`。两份程序分别修改、分别部署、分别履行 GPL v3/GPL v2 义务。不要拼接两份部署包或删去版权和许可证。源程序的功能描述注释不是许可依据；许可依据和固定来源见 [THIRD_PARTY.md](../THIRD_PARTY.md)。
 

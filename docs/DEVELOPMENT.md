@@ -335,4 +335,4 @@ Actions先手动成功，完成第 1.1 节三项验收后再推进30/60分钟sch
 
 保留既有许可边界：fanout MIT可复用并保留声明；CheckSocks5按GPL v3条件处理；gate与CF-vpngate无明确许可时仅参考；AimiliVPN暂仅功能参考。EdgeTunnel仅保留外部兼容接口，不将许可兼容性未确认的Worker源码混成一份，不把第二个部署作为必需依赖。许可记录不能用“组合项目”代替。
 
-v0.1 已在本机和 GitHub Actions 完成；v0.2 现用保留许可声明的 Multi-Exit 底座读取同一 `node_pool.json`，并已在一台小规格 Debian VPS 上完成一个固定 Slot 的真实验收（包括掉线失败、kill-switch 和自动恢复），证据见 [`VPS_DEPLOYMENT.md`](VPS_DEPLOYMENT.md)。CF-1/CF-2 已完成源码与自动化测试；当前 Cloudflare 三个过渡服务已经部署，但这不是单 Worker 最终交付。下一阶段严格按第 1.1 节完成 **Cloudflare 三服务合一、全量发现与分层筛选、VPS 三 Slot**。单 Worker 合并、分层预算、新 Slot 编号和 VPS 独立单命令安装均是待实现要求，不能以现有过渡部署的测试结果替代新形态验收。前三项完成后再推进定时刷新/回滚、后续 UI 与画像、配置导出等里程碑；外部兼容适配器和 3x-ui API 自动写入继续后置。
+v0.1 已在本机和 GitHub Actions 完成；v0.2 现用保留许可声明的 Multi-Exit 底座读取同一 `node_pool.json`，并已在一台小规格 Debian VPS 上完成一个固定 Slot 的真实验收（包括掉线失败、kill-switch 和自动恢复），证据见 [`VPS_DEPLOYMENT.md`](VPS_DEPLOYMENT.md)。Cloudflare 已完成单 Worker 合并的第一版实现：普通运行变量、唯一 KV、内置 SSTP 检查和 TCP-only 数据面，不依赖旧 Worker。当前仍需补充 Cloudflare Sockets 实际正向/失效后端验收、全量发现与分层筛选、VPS 三 Slot；未完成这些验收前，不能把本地单元测试当成完整链路交付。外部兼容适配器和 3x-ui API 自动写入继续后置。

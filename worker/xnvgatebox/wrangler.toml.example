@@ -4,11 +4,17 @@ compatibility_date = "2026-10-10"
 workers_dev = true
 
 [vars]
-# This is the public host used when generating VLESS links.
+# All runtime settings are ordinary Worker variables. Replace the examples
+# before deployment; no other Worker is required.
 PUBLIC_HOST = "xnvgatebox.<account-subdomain>.workers.dev"
-# Migration-only upstreams. They are not exposed as user-facing endpoints.
-LEGACY_CHECKER_URL = "https://vpngate-checker.pages.dev/check"
-LEGACY_EDGE_URL = "https://vpngate-edge.pages.dev"
+DATA_PLANE_PORT = "443"
+DATA_PLANE_BASE_PATH = "/"
+VLESS_UUID = "replace-with-uuid-v4"
+ADMIN_TOKEN = "replace-with-admin-token"
+SUB_TOKEN = "replace-with-subscription-token"
+VPN_USERNAME = "vpn"
+VPN_PASSWORD = "vpn"
+CHECKER_TOKEN = "replace-with-checker-token"
 
 [[kv_namespaces]]
 binding = "MANIFEST"

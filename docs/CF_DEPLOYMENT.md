@@ -4,9 +4,15 @@
 
 已部署统一公开入口：[xnvgatebox Worker](https://xnvgatebox.waynee.workers.dev)。该 Worker 绑定唯一 manifest KV（`e511651b3bfc4530bc8395429f580f75`），同一脚本提供 `/health`、`/admin`、`/api/status`、`/api/manifest`、`/sub`、`/check` 和 WebSocket 数据面入口。
 
-当前版本是**迁移兼容构建**：`/check` 和 WebSocket 数据面经过统一入口的鉴权、参数校验和固定目标校验后，转发到第一轮已部署的两个过渡服务。用户不需要再部署或访问这两个地址；下一阶段用本项目自有、许可证兼容的模块替换迁移上游，并删除 `LEGACY_CHECKER_URL` / `LEGACY_EDGE_URL` 两个变量，才算完成最终的完全自包含单 Worker。
+当前版本是**自包含单 Worker 构建**：`/check` 和 TCP-only WebSocket 数据面直接在 `xnvgatebox` Worker 内执行，通过 Cloudflare Sockets 连接 VPN Gate SSTP 节点，不依赖第一轮的其他 Worker。生产环境只保留一个 Worker 和一个 KV Namespace。
 
 部署版本：`5f0e6356-730d-4900-9a70-39f84e8f5925`。公网烟测结果：`/health` 返回 `configured=true` 且四个模块均就绪；`/admin` 返回 200；错误订阅 token 返回 401；带有效检查凭据的 `/check` 返回 200；无效数据面主机返回 404；标准 WebSocket 失败控制入口返回 101。管理页面只显示 `xnvgatebox`，不显示过渡服务地址。
+
+## 2026-10-10 自包含与普通变量部署
+
+已重新部署版本 `364a539b-2542-4d09-84e8-9a2191fb1777`。本次部署移除了 `LEGACY_CHECKER_URL`、`LEGACY_EDGE_URL` 和对旧 Worker 的转发；`/check` 使用 Worker 内置的 SSTP/PPP/TCP 检查，WebSocket 数据面使用项目自有的 TCP-only VLESS→SSTP 实现。`VLESS_UUID`、`ADMIN_TOKEN`、`SUB_TOKEN`、`VPN_USERNAME`、`VPN_PASSWORD`、`CHECKER_TOKEN` 作为普通运行变量写入统一 Worker，旧 Secret 绑定由该部署覆盖。
+
+本地 JavaScript 边界测试和统一 Worker 测试均通过。当前执行环境的 DNS 解析不稳定，线上 `/health` 和真实 SSTP 正向链路尚未完成本轮独立复测；浏览器可以打开 `/admin`，但刷新后需要重新输入管理员 token 才能调用 `/api/status`。下一步只做 Cloudflare Sockets 的真实节点检查、失效节点对照和订阅链路验收。
 
 更新：2026-10-08。当前账号的 Workers 列表中没有现成 Checker 或 EdgeTunnel；已有业务未修改。拟新增 `vpngate-checker` 与 `vpngate-edge`，通过 Pages 高级模式分别运行独立 Worker，使用 `pages.dev` 域名，不新增 DNS、KV、3x-ui 或 VPS，不选择付费升级。
 
@@ -71,7 +77,7 @@ v0.1 的“至少一条实际订阅链路、expected=actual、无需 VPS”完�
 
 工作流增加了 `publish_cf` 手工开关。选择 `serverless` 并打开该开关时，工作流通过 `scripts/publish_cf_manifest.py` 用 `CF_API_TOKEN`、`CF_ACCOUNT_ID`、`CF_KV_NAMESPACE_ID` 单次 PUT 替换 KV 键。没有这三个仓库 Secrets 时不会发布；默认的 `pool-only` 运行也不会写入 Cloudflare。Worker 的部署模板和 Secret 名称见 [`worker/control/README.md`](../worker/control/README.md)。
 
-这一轮只完成自有控制面和订阅生成，实际 VLESS/SSTP 数据面仍需在 CF-3 绑定一个可验活的 Worker。订阅生成器只接受 manifest 中满足新鲜有效期、`expected_exit_ip == actual_exit_ip` 且官方 `*.opengw.net` 的节点；manifest 过期、为空或被篡改时 `/sub` 返回非 200。EdgeTunnel 仍然是可选适配器，不是这个控制面的运行依赖。
+订阅生成器只接受 manifest 中满足新鲜有效期、`expected_exit_ip == actual_exit_ip` 且官方 `*.opengw.net` 的节点；manifest 过期、为空或被篡改时 `/sub` 返回非 200。历史记录中的 EdgeTunnel 仅作为实现参考，不是当前 Worker 的运行依赖。
 
 ## 统一 Worker 的 GitHub Actions 验证
 

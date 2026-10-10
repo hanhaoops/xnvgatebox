@@ -1,7 +1,8 @@
-// xnvgatebox's single public Worker: management, subscription, checker facade,
-// and data-plane facade share one entrypoint. Legacy upstreams are migration
-// inputs only and are configured explicitly; they are not user-facing services.
+// xnvgatebox's single public Worker: management, subscription, node checking,
+// and TCP data-plane handling share one entrypoint.
 // SPDX-License-Identifier: GPL-3.0-only
+
+import { checkSstp, handleVlessWebSocket } from './selfhosted_edge.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const NODE_HOST_RE = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.opengw\.net$/i;
@@ -61,16 +62,6 @@ function validPort(value) {
   return Number.isInteger(value) && value >= 1 && value <= 65535;
 }
 
-function upstreamUrl(value) {
-  try {
-    const parsed = new URL(String(value || ''));
-    if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.hash) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
 function backendAuthority(value, allowFailureControl = false) {
   try {
     const proxy = new URL('sstp://' + String(value || ''));
@@ -78,6 +69,18 @@ function backendAuthority(value, allowFailureControl = false) {
     const port = Number(proxy.port || 443);
     if (!validPort(port)) return null;
     return { hostname: proxy.hostname.toLowerCase(), port };
+  } catch {
+    return null;
+  }
+}
+
+function parseSstpAuthority(value, allowFailureControl = false) {
+  try {
+    const parsed = new URL('sstp://' + String(value || ''));
+    if ((!NODE_HOST_RE.test(parsed.hostname) && !(allowFailureControl && parsed.hostname === 'nonexistent.invalid')) || parsed.search || parsed.hash || (parsed.pathname && parsed.pathname !== '/')) return null;
+    const port = Number(parsed.port || 443);
+    if (!validPort(port)) return null;
+    return { hostname: parsed.hostname.toLowerCase(), port, username: decodeURIComponent(parsed.username || ''), password: decodeURIComponent(parsed.password || '') };
   } catch {
     return null;
   }
@@ -98,12 +101,6 @@ function validEdgeRequest(request, url) {
   if (request.method !== 'GET' || (request.headers.get('upgrade') || '').toLowerCase() !== 'websocket') return false;
   if ([...url.searchParams.keys()].some(key => !['sstp', 'globalproxy'].includes(key)) || url.searchParams.getAll('sstp').length !== 1 || url.searchParams.getAll('globalproxy').length !== 1 || url.searchParams.get('globalproxy') !== '1') return false;
   return Boolean(backendAuthority(url.searchParams.get('sstp'), true));
-}
-
-async function forward(request, target, extraHeaders = {}) {
-  const headers = new Headers(request.headers);
-  for (const [key, value] of Object.entries(extraHeaders)) headers.set(key, value);
-  return fetch(new Request(target.toString(), { method: request.method, headers, body: request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body }));
 }
 
 function validateNode(node) {
@@ -179,8 +176,8 @@ export async function handleRequest(request, env = {}) {
   if (request.method === 'GET' && path === '/health') {
     const manifest = await readManifest(env);
     const configured = UUID_RE.test(String(env.VLESS_UUID || '')) && Boolean(env.ADMIN_TOKEN) && Boolean(env.SUB_TOKEN);
-    const checkerReady = Boolean(env.CHECKER_TOKEN) && Boolean(upstreamUrl(env.LEGACY_CHECKER_URL));
-    const dataPlaneReady = Boolean(upstreamUrl(env.LEGACY_EDGE_URL));
+    const checkerReady = Boolean(env.CHECKER_TOKEN);
+    const dataPlaneReady = UUID_RE.test(String(env.VLESS_UUID || '')) && Boolean(env.PUBLIC_HOST || env.DATA_PLANE_HOST);
     return json({ service: 'xnvgatebox', version: 2, configured,
       modules: { management: configured, subscription: configured, checker: checkerReady, data_plane: dataPlaneReady },
       manifest_ready: validateManifest(manifest), nodes: Array.isArray(manifest?.nodes) ? manifest.nodes.length : 0 });
@@ -190,20 +187,28 @@ export async function handleRequest(request, env = {}) {
   if (path === '/check') {
     if (request.method !== 'GET' || !validCheckerRequest(url)) return json({ error: 'invalid_check' }, 400);
     if (!bearer(request, String(env.CHECKER_TOKEN || ''))) return json({ error: 'unauthorized' }, 401);
-    const target = upstreamUrl(env.LEGACY_CHECKER_URL);
-    if (!target) return json({ error: 'checker_unavailable' }, 503);
-    target.search = url.search;
-    try { return await forward(request, target, { 'authorization': `Bearer ${env.CHECKER_TOKEN}` }); }
-    catch { return json({ error: 'checker_unavailable' }, 502); }
+    const value = url.searchParams.get('proxy') || '';
+    const proxy = parseSstpAuthority(value.slice('sstp://'.length));
+    if (!proxy) return json({ error: 'invalid_check' }, 400);
+    try {
+      const started = Date.now();
+      const result = await (typeof env.__checkSstp === 'function' ? env.__checkSstp(proxy) : checkSstp(proxy));
+      return json({ success: true, proxy: value, exit: { ip: result.exitIp }, assigned_ip: result.assignedIp, responseTime: Date.now() - started });
+    } catch (error) {
+      return json({ success: false, proxy: value, error: error?.message || 'check_failed' }, 200);
+    }
   }
 
   if (path === '/' && validEdgeRequest(request, url)) {
-    const target = upstreamUrl(env.LEGACY_EDGE_URL);
-    if (!target) return json({ error: 'data_plane_unavailable' }, 503);
-    target.pathname = url.pathname;
-    target.search = url.search;
-    try { return await forward(request, target, { 'x-xnvgatebox-unified': '1' }); }
-    catch { return json({ error: 'data_plane_unavailable' }, 502); }
+    if (!UUID_RE.test(String(env.VLESS_UUID || ''))) return json({ error: 'data_plane_unavailable' }, 503);
+    const authority = parseSstpAuthority(url.searchParams.get('sstp') || '', true);
+    if (!authority) return json({ error: 'invalid_backend' }, 400);
+    try {
+      const value = `${encodeURIComponent(authority.username)}:${encodeURIComponent(authority.password)}@${authority.hostname}:${authority.port}`;
+      return await (typeof env.__handleVlessWebSocket === 'function' ? env.__handleVlessWebSocket(request, env, value) : handleVlessWebSocket(request, env, value));
+    } catch {
+      return json({ error: 'data_plane_unavailable' }, 502);
+    }
   }
   if (request.method !== 'GET') return json({ error: 'not_found' }, 404);
 
