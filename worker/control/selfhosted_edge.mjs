@@ -89,6 +89,7 @@ async function openSstp(proxy, targetHost, targetPort) {
   const writer = socket.writable.getWriter();
   let buffered = EMPTY;
   let closed = false;
+  let phase = 'connect';
   const close = () => { if (closed) return; closed = true; try { reader.cancel(); } catch {} try { writer.close(); } catch {} try { socket.close(); } catch {} };
   const readChunk = async () => { const item = await reader.read(); if (item.done || !item.value) throw new Error('sstp_closed'); return new Uint8Array(item.value); };
   const readBytes = async size => { while (buffered.byteLength < size) buffered = concat(buffered, await readChunk()); const out = buffered.subarray(0, size); buffered = buffered.subarray(size); return out; };
@@ -96,6 +97,7 @@ async function openSstp(proxy, targetHost, targetPort) {
   const readPacket = async () => { const head = await timeout(readBytes(4), 12000, 'sstp_packet_timeout'); const length = u16(head, 2) & 0x0fff; if (length < 4 || length > 8192) throw new Error('sstp_packet_invalid'); return { control: (head[1] & 1) !== 0, body: length > 4 ? await timeout(readBytes(length - 4), 12000, 'sstp_packet_body_timeout') : EMPTY }; };
 
   try {
+    phase = 'http_handshake';
     const host = proxy.port === 443 ? proxy.hostname : `${proxy.hostname}:${proxy.port}`;
     const request = encoder.encode(`SSTP_DUPLEX_POST /sra_{BA195980-CD49-458b-9E23-C84EE0ADCD75}/ HTTP/1.1\r\nHost: ${host}\r\nContent-Length: 18446744073709551615\r\nSSTPCORRELATIONID: {${crypto.randomUUID()}}\r\n\r\n`);
     const control = new Uint8Array(14); control.set([0x10, 0x01, 0x80, 0x0e, 0, 1, 0, 1, 0, 1, 0, 6, 0, 1]);
@@ -105,33 +107,52 @@ async function openSstp(proxy, targetHost, targetPort) {
     for (;;) { if ((await timeout(readLine(), 12000, 'sstp_headers_timeout')) === '') break; }
     if (!/^HTTP\/\d(?:\.\d)?\s+2\d\d/i.test(status)) throw new Error('sstp_http_rejected');
 
-    let nextId = 2, localAck = false, peerAck = false, needsPap = false, papDone = false, ipcpDone = false, assignedIp = null;
+    phase = 'ppp_handshake';
+    let nextId = 2, localAck = false, peerAck = false, needsPap = false, papSent = false, papDone = false, ipcpStarted = false, ipcpDone = false, assignedIp = null;
+    const sendPapIfReady = async () => {
+      if (!localAck || !peerAck || !needsPap || papSent) return;
+      const user = encoder.encode(proxy.username || ''), pass = encoder.encode(proxy.password || '');
+      if (user.byteLength > 255 || pass.byteLength > 255) throw new Error('sstp_auth_too_long');
+      const pap = new Uint8Array(8 + user.byteLength + pass.byteLength);
+      const view = new DataView(pap.buffer);
+      put16(view, 0, 0xc023); pap[2] = 1; pap[3] = nextId++;
+      put16(view, 4, pap.byteLength - 2); pap[6] = user.byteLength; pap.set(user, 7);
+      pap[7 + user.byteLength] = pass.byteLength; pap.set(pass, 8 + user.byteLength);
+      await writer.write(sstpPacket(pap)); papSent = true;
+    };
+    const startIpcpIfReady = async () => {
+      if (!localAck || !peerAck || ipcpStarted || (needsPap && !papDone)) return;
+      await writer.write(sstpPacket(pppConfigure(0x8021, 1, nextId++, [{ type: 3, data: new Uint8Array(4) }])));
+      ipcpStarted = true;
+    };
     for (let rounds = 0; rounds < 60 && !ipcpDone; rounds++) {
+      phase = `ppp_round_${rounds}`;
       const packet = await readPacket(); if (packet.control) continue;
       const frame = parsePpp(packet.body); if (!frame) continue;
       if (frame.protocol === 0xc021) {
         if (frame.code === 1) {
           const auth = pppOptions(frame.body).find(x => x.type === 3)?.data;
-          if (auth && u16(auth) !== 0xc023) throw new Error('sstp_auth_unsupported');
-          needsPap = Boolean(auth);
+          if (auth?.byteLength >= 2) {
+            if (u16(auth) !== 0xc023) throw new Error('sstp_auth_unsupported');
+            needsPap = true;
+          }
           const ack = new Uint8Array(frame.raw); ack[2] = 2; await writer.write(sstpPacket(ack)); peerAck = true;
         } else if (frame.code === 2) localAck = true;
-        if (localAck && peerAck && needsPap && !papDone) {
-          const user = encoder.encode(proxy.username || ''), pass = encoder.encode(proxy.password || '');
-          const pap = new Uint8Array(8 + user.byteLength + pass.byteLength); const view = new DataView(pap.buffer); put16(view, 0, 0xc023); pap[2] = 1; pap[3] = nextId++; put16(view, 4, pap.byteLength - 2); pap[6] = user.byteLength; pap.set(user, 7); pap[7 + user.byteLength] = pass.byteLength; pap.set(pass, 8 + user.byteLength); await writer.write(sstpPacket(pap));
-        }
+        await sendPapIfReady(); await startIpcpIfReady();
       } else if (frame.protocol === 0xc023) {
         if (frame.code === 3) throw new Error('sstp_auth_failed');
         if (frame.code === 2) papDone = true;
+        await startIpcpIfReady();
       } else if (frame.protocol === 0x8021) {
-        if (frame.code === 1) { const ack = new Uint8Array(frame.raw); ack[2] = 2; await writer.write(sstpPacket(ack)); }
-        if (frame.code === 3) { const address = pppOptions(frame.body).find(x => x.type === 3)?.data; if (address?.byteLength === 4) { assignedIp = [...address].join('.'); await writer.write(sstpPacket(pppConfigure(0x8021, 1, nextId++, [{ type: 3, data: address }]))); } }
+        if (frame.code === 1) { const ack = new Uint8Array(frame.raw); ack[2] = 2; await writer.write(sstpPacket(ack)); await startIpcpIfReady(); }
+        if (frame.code === 3) { const address = pppOptions(frame.body).find(x => x.type === 3)?.data; if (address?.byteLength === 4) { assignedIp = [...address].join('.'); await writer.write(sstpPacket(pppConfigure(0x8021, 1, nextId++, [{ type: 3, data: address }]))); ipcpStarted = true; } }
         if (frame.code === 2) { const address = pppOptions(frame.body).find(x => x.type === 3)?.data; if (address?.byteLength === 4) assignedIp = [...address].join('.'); if (assignedIp) ipcpDone = true; }
       }
-      if (localAck && peerAck && (!needsPap || papDone) && !ipcpDone && rounds % 3 === 2) await writer.write(sstpPacket(pppConfigure(0x8021, 1, nextId++, [{ type: 3, data: new Uint8Array(4) }])));
+      await sendPapIfReady(); await startIpcpIfReady();
     }
     if (!assignedIp) throw new Error('sstp_no_ipv4');
-    const destination = targetHost.includes('.') ? targetHost : (await resolveV4(targetHost));
+    phase = 'tcp_handshake';
+    const destination = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(targetHost) ? targetHost : (await resolveV4(targetHost));
     if (!destination) throw new Error('target_ipv4_unavailable');
     let sequence = u32(crypto.getRandomValues(new Uint8Array(4))), acknowledge = 0;
     const sourcePort = 10000 + (u16(crypto.getRandomValues(new Uint8Array(2))) % 50000);
@@ -146,10 +167,11 @@ async function openSstp(proxy, targetHost, targetPort) {
     let ready = false;
     for (let i = 0; i < 40; i++) { const packet = await readPacket(); if (packet.control) continue; const f = parsePpp(packet.body); if (!f || f.protocol !== 0x0021 || f.ip.byteLength < 40) continue; const ipAt = (f.ip[0] & 15) * 4, flags = f.ip[ipAt + 13]; if (u16(f.ip, ipAt) !== targetPort || u16(f.ip, ipAt + 2) !== sourcePort || (flags & 0x12) !== 0x12) continue; acknowledge = (u32(f.ip, ipAt + 4) + 1) >>> 0; await writer.write(tcpFrame(0x10)); ready = true; break; }
     if (!ready) throw new Error('sstp_tcp_timeout');
+    phase = 'target_io';
     const read = async () => { for (;;) { const packet = await readPacket(); if (packet.control) continue; const f = parsePpp(packet.body); if (!f || f.protocol !== 0x0021 || f.ip.byteLength < 40) continue; const ipAt = (f.ip[0] & 15) * 4, tcpAt = ipAt; if (u16(f.ip, tcpAt) !== targetPort || u16(f.ip, tcpAt + 2) !== sourcePort) continue; const header = ((f.ip[tcpAt + 12] >> 4) & 15) * 4, payload = f.ip.subarray(ipAt + header); if (payload.byteLength) { acknowledge = (u32(f.ip, tcpAt + 4) + payload.byteLength) >>> 0; await writer.write(tcpFrame(0x10)); return payload; } if (f.ip[tcpAt + 13] & 1) { await writer.write(tcpFrame(0x11)); return null; } } };
     const write = async payload => { const bytes = payload instanceof Uint8Array ? payload : new Uint8Array(payload); for (let at = 0; at < bytes.byteLength; at += 1300) { const part = bytes.subarray(at, Math.min(at + 1300, bytes.byteLength)); await writer.write(tcpFrame(0x18, part)); sequence = (sequence + part.byteLength) >>> 0; } };
     return { readable: { read }, writable: { write }, assignedIp, close };
-  } catch (error) { close(); throw error; }
+  } catch (error) { close(); throw new Error(`${phase}:${error?.message || 'sstp_failed'}`); }
 }
 
 async function resolveV4(host) {
@@ -171,12 +193,25 @@ export function parseVless(bytes, uuid) {
 }
 
 export async function checkSstp(proxy) {
+  // Use a plain HTTP IP echo so this single Worker does not need a second TLS
+  // implementation inside the SSTP data path. Full-chain verification still
+  // performs the HTTPS checks through the VLESS data plane.
   const tunnel = await openSstp(proxy, 'api.ipify.org', 80);
   try {
-    await tunnel.writable.write(encoder.encode('GET /?format=json HTTP/1.1\r\nHost: api.ipify.org\r\nConnection: close\r\n\r\n'));
-    let data = EMPTY;
-    for (let i = 0; i < 12 && data.byteLength < 65536; i++) { const part = await timeout(tunnel.readable.read(), 12000, 'exit_read_timeout'); if (!part) break; data = concat(data, part); if (data.includes(10) && /\r\n\r\n/.test(decoder.decode(data))) break; }
-    const text = decoder.decode(data); const match = text.match(/\{\s*"ip"\s*:\s*"([^\"]+)"\s*\}/); if (!match) throw new Error('exit_ip_unavailable'); return { exitIp: match[1], assignedIp: tunnel.assignedIp };
+    try {
+      await tunnel.writable.write(encoder.encode('GET /?format=json HTTP/1.1\r\nHost: api.ipify.org\r\nConnection: close\r\n\r\n'));
+      let data = EMPTY;
+      for (let i = 0; i < 8 && data.byteLength < 8192; i += 1) {
+        const item = await timeout(tunnel.readable.read(), 12000, 'exit_read_timeout');
+        if (!item) break;
+        data = concat(data, new Uint8Array(item));
+        const text = decoder.decode(data);
+        const match = text.match(/\{\s*"ip"\s*:\s*"([^\"]+)"\s*\}/);
+        if (match) return { exitIp: match[1], assignedIp: tunnel.assignedIp };
+      }
+    } catch (error) { throw new Error(`ip_echo:${error?.message || 'failed'}`); }
+    finally { tunnel.close(); }
+    throw new Error('exit_ip_unavailable');
   } finally { tunnel.close(); }
 }
 
