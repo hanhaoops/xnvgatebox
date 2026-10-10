@@ -72,3 +72,9 @@ v0.1 的“至少一条实际订阅链路、expected=actual、无需 VPS”完�
 工作流增加了 `publish_cf` 手工开关。选择 `serverless` 并打开该开关时，工作流通过 `scripts/publish_cf_manifest.py` 用 `CF_API_TOKEN`、`CF_ACCOUNT_ID`、`CF_KV_NAMESPACE_ID` 单次 PUT 替换 KV 键。没有这三个仓库 Secrets 时不会发布；默认的 `pool-only` 运行也不会写入 Cloudflare。Worker 的部署模板和 Secret 名称见 [`worker/control/README.md`](../worker/control/README.md)。
 
 这一轮只完成自有控制面和订阅生成，实际 VLESS/SSTP 数据面仍需在 CF-3 绑定一个可验活的 Worker。订阅生成器只接受 manifest 中满足新鲜有效期、`expected_exit_ip == actual_exit_ip` 且官方 `*.opengw.net` 的节点；manifest 过期、为空或被篡改时 `/sub` 返回非 200。EdgeTunnel 仍然是可选适配器，不是这个控制面的运行依赖。
+
+## 统一 Worker 的 GitHub Actions 验证
+
+2026-10-10，提交 `fb1c378` 的 `serverless` 手动运行 [Build node pool / verify Mode A #3](https://github.com/hanhaoops/xnvgatebox/actions/runs/38010061610) 成功，耗时 5 分 8 秒。实际 Cloudflare VLESS 链路验证返回 `{"status":"passed","published":21}`，并生成 `node-pool-and-evidence` 公开 artifact（295 KB）。本次运行将 `CHECKER_URL` 和数据面主机都指向统一 `xnvgatebox.waynee.workers.dev`，证明 GitHub Actions 已不再依赖用户单独部署的两个公开入口。
+
+本次运行的 `publish_cf` 保持关闭，因此 KV 没有被写入，Worker 的 `/health` 仍会显示 `manifest_ready=false`；这是预期的发布前验证状态。要让 `/sub` 返回真实订阅，还需配置 GitHub Secrets `CF_API_TOKEN`、`CF_ACCOUNT_ID` 和 `CF_KV_NAMESPACE_ID` 后，再以 `serverless + publish_cf=true` 运行一次。
