@@ -84,7 +84,9 @@ assert.deepEqual(unifiedHealth.modules, { management: true, subscription: true, 
 const checkerPath = '/check?proxy=' + encodeURIComponent('sstp://vpn:vpn@public-vpn-1.opengw.net:443');
 response = await handleRequest(request(checkerPath, { headers: { authorization: 'Bearer checker-secret' } }), unifiedEnv);
 assert.equal(response.status, 200);
-assert.equal((await response.json()).exit.ip, '73.1.1.1');
+const checkerResult = await response.json();
+assert.equal(checkerResult.type, 'sstp');
+assert.equal(checkerResult.exit.ip, '73.1.1.1');
 const edgePath = '/?sstp=' + encodeURIComponent('vpn:vpn@public-vpn-1.opengw.net:443') + '&globalproxy=1';
 response = await handleRequest(request(edgePath, { headers: { upgrade: 'websocket' } }), unifiedEnv);
 assert.equal(response.status, 200);

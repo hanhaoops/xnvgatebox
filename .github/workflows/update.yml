@@ -11,9 +11,11 @@ on:
         description: 'publish the fresh credential-free manifest to Cloudflare KV'
         type: boolean
         default: false
-  # Enable after a successful manual serverless run, for example:
-  # schedule:
-  #   - cron: '17 * * * *'
+  # Keep the published manifest fresh without requiring a manual run.
+  # GitHub may delay scheduled jobs by a few minutes; the manifest TTL is
+  # one hour, so this hourly cadence leaves room for that delay.
+  schedule:
+    - cron: '17 * * * *'
 permissions:
   contents: read
 concurrency:
