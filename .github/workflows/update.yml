@@ -16,6 +16,16 @@ on:
   # one hour, so this hourly cadence leaves room for that delay.
   schedule:
     - cron: '17 * * * *'
+  # Validate checker/workflow changes immediately; this path never publishes
+  # to KV, so a code push cannot replace a working manifest by itself.
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'scripts/**'
+      - 'worker/**'
+      - 'config/**'
+      - '.github/workflows/update.yml'
 permissions:
   contents: read
 concurrency:
@@ -33,13 +43,13 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install pinned Xray
-        if: inputs.profile == 'serverless' || github.event_name == 'schedule'
+        if: inputs.profile == 'serverless' || github.event_name == 'schedule' || github.event_name == 'push'
         run: python scripts/install_xray.py
       - name: Build shared candidate pool
         if: inputs.profile == 'pool-only'
         run: python scripts/toolbox.py pool
       - name: Verify the actual Cloudflare VLESS chain
-        if: inputs.profile == 'serverless' || github.event_name == 'schedule'
+        if: inputs.profile == 'serverless' || github.event_name == 'schedule' || github.event_name == 'push'
         env:
           CHECKER_URL: https://xnvgatebox.waynee.workers.dev/check
           # The unified Worker accepts VLESS_UUID for /check, so the Actions
