@@ -24,7 +24,7 @@ PUBLIC_HOST      # 可选；订阅链接使用的唯一 Worker 主机名
 DATA_PLANE_HOST  # 兼容旧配置；PUBLIC_HOST 设置后优先
 DATA_PLANE_PORT  # 可选；覆盖 manifest.data_plane.port
 DATA_PLANE_BASE_PATH # 可选；覆盖 manifest.data_plane.base_path
-CHECKER_TOKEN    # /check 管理鉴权
+CHECKER_TOKEN    # /check 管理鉴权；未设置时使用 VLESS_UUID
 ```
 
 `MANIFEST` 是 KV namespace binding，固定读取键 `manifest:current`。没有 KV 时可以在本地开发用 `MANIFEST_JSON`，生产环境不要把 manifest JSON 塞进源码或公开变量。
@@ -36,5 +36,7 @@ npx wrangler deploy
 ```
 
 GitHub Actions 使用 `scripts/publish_cf_manifest.py` 通过 Cloudflare API 原子替换同一 KV 键。需要仓库 Secrets：`CF_API_TOKEN`、`CF_ACCOUNT_ID`、`CF_KV_NAMESPACE_ID`。发布步骤默认关闭，手工运行时选择 `publish_cf=true` 才会写入 KV。
+
+统一 Worker 的 `/check` 接口兼容 `CHECKER_TOKEN`，但 GitHub Actions 默认直接使用已有的 `VLESS_UUID` 作为检查凭据，避免单独的 `CHECKER_TOKEN` 在 Worker 重部署后失配。
 
 当前版本已移除 `LEGACY_CHECKER_URL` 和 `LEGACY_EDGE_URL`。节点检查和 TCP-only 数据面在本 Worker 内执行，不依赖其他已部署的 Worker。运行时参数使用普通变量；示例文件只放占位值，真实值由部署入口生成。

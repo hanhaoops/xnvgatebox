@@ -17,8 +17,12 @@ def proxy_authority(candidate: dict, environment: dict) -> str:
 
 def checker_headers() -> dict:
     headers = {}
-    if os.getenv("CHECKER_TOKEN"):
-        headers["Authorization"] = "Bearer " + os.environ["CHECKER_TOKEN"]
+    # Reuse the VLESS UUID when a separate checker token is not configured.
+    # This keeps the single-Worker deployment from failing after a token
+    # rotation while preserving CHECKER_TOKEN compatibility for old installs.
+    token = os.getenv("CHECKER_TOKEN") or os.getenv("VLESS_UUID")
+    if token:
+        headers["Authorization"] = "Bearer " + token
     for env_key, header in (("CF_ACCESS_CLIENT_ID", "CF-Access-Client-Id"),
                             ("CF_ACCESS_CLIENT_SECRET", "CF-Access-Client-Secret")):
         if os.getenv(env_key):

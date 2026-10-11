@@ -42,7 +42,9 @@ jobs:
         if: inputs.profile == 'serverless' || github.event_name == 'schedule'
         env:
           CHECKER_URL: https://xnvgatebox.waynee.workers.dev/check
-          CHECKER_TOKEN: ${{ secrets.CHECKER_TOKEN }}
+          # The unified Worker accepts VLESS_UUID for /check, so the Actions
+          # verifier does not depend on a second token that can drift.
+          CHECKER_TOKEN: ${{ secrets.VLESS_UUID }}
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
           EDGETUNNEL_HOST: xnvgatebox.waynee.workers.dev

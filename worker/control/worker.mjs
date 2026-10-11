@@ -36,6 +36,15 @@ function bearer(request, expected) {
   return Boolean(expected) && Boolean(match) && tokenEqual(match[1], expected);
 }
 
+function checkerAuthorized(request, env) {
+  // VLESS_UUID is already shared with the Actions verifier. Accepting it as
+  // the checker credential avoids a second token drifting out of sync after a
+  // Worker redeploy; CHECKER_TOKEN remains supported for compatibility.
+  return [env.CHECKER_TOKEN, env.VLESS_UUID]
+    .filter(value => typeof value === 'string' && value.length > 0)
+    .some(value => bearer(request, value));
+}
+
 function fresh(value) {
   const timestamp = Date.parse(value || '');
   return Number.isFinite(timestamp) && timestamp > Date.now();
@@ -176,7 +185,7 @@ export async function handleRequest(request, env = {}) {
   if (request.method === 'GET' && path === '/health') {
     const manifest = await readManifest(env);
     const configured = UUID_RE.test(String(env.VLESS_UUID || '')) && Boolean(env.ADMIN_TOKEN) && Boolean(env.SUB_TOKEN);
-    const checkerReady = Boolean(env.CHECKER_TOKEN);
+    const checkerReady = Boolean(env.CHECKER_TOKEN || env.VLESS_UUID);
     const dataPlaneReady = UUID_RE.test(String(env.VLESS_UUID || '')) && Boolean(env.PUBLIC_HOST || env.DATA_PLANE_HOST);
     return json({ service: 'xnvgatebox', version: 2, configured,
       modules: { management: configured, subscription: configured, checker: checkerReady, data_plane: dataPlaneReady },
@@ -186,7 +195,7 @@ export async function handleRequest(request, env = {}) {
 
   if (path === '/check') {
     if (request.method !== 'GET' || !validCheckerRequest(url)) return json({ error: 'invalid_check' }, 400);
-    if (!bearer(request, String(env.CHECKER_TOKEN || ''))) return json({ error: 'unauthorized' }, 401);
+    if (!checkerAuthorized(request, env)) return json({ error: 'unauthorized' }, 401);
     const value = url.searchParams.get('proxy') || '';
     const proxy = parseSstpAuthority(value.slice('sstp://'.length));
     if (!proxy) return json({ error: 'invalid_check' }, 400);
