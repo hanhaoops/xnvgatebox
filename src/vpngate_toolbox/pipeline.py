@@ -78,6 +78,12 @@ def run_mode_a(settings: dict, environment: dict, output: Path, runtime: Path, c
         passed = [node for node in pool["nodes"] if node["protocols"]["sstp"]["status"] == "passed"]
         report["sstp_passed"] = len(passed)
         report["checker_service_errors"] = sum("service_error" in node["protocols"]["sstp"] for node in pool["nodes"])
+        service_error_codes = {}
+        for node in pool["nodes"]:
+            code = node["protocols"]["sstp"].get("service_error")
+            if code:
+                service_error_codes[code] = service_error_codes.get(code, 0) + 1
+        report["checker_service_error_codes"] = service_error_codes
         if not passed:
             save_pool(pool, output)
             raise ToolError("no_sstp_passed_nodes")

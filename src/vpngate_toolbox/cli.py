@@ -80,7 +80,8 @@ def main(argv=None):
                 # the job log without downloading the private evidence artifact.
                 print(json.dumps({key: report.get(key) for key in
                                   ("status", "published", "failure_code", "candidates",
-                                   "sstp_passed", "checker_service_errors")}))
+                                   "sstp_passed", "checker_service_errors",
+                                   "checker_service_error_codes")}))
                 return 0 if report["status"] == "passed" else 3
             view = json.loads(args.view.read_text())
             # Export from downloaded public evidence without rerunning a different config.
