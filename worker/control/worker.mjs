@@ -204,7 +204,10 @@ export async function handleRequest(request, env = {}) {
       const result = await (typeof env.__checkSstp === 'function' ? env.__checkSstp(proxy) : checkSstp(proxy));
       // The Actions checker uses this discriminator to distinguish the
       // self-hosted SSTP checker from an unexpected response or HTML error.
-      return json({ type: 'sstp', success: true, proxy: value, exit: { ip: result.exitIp }, assigned_ip: result.assignedIp, responseTime: Date.now() - started });
+      return json({ type: 'sstp', success: true, proxy: value,
+        hostname: proxy.hostname, port: proxy.port,
+        exit: { ip: result.exitIp }, assigned_ip: result.assignedIp,
+        responseTime: Date.now() - started });
     } catch (error) {
       return json({ type: 'sstp', success: false, proxy: value, error: error?.message || 'check_failed' }, 200);
     }

@@ -86,6 +86,8 @@ response = await handleRequest(request(checkerPath, { headers: { authorization: 
 assert.equal(response.status, 200);
 const checkerResult = await response.json();
 assert.equal(checkerResult.type, 'sstp');
+assert.equal(checkerResult.hostname, 'public-vpn-1.opengw.net');
+assert.equal(checkerResult.port, 443);
 assert.equal(checkerResult.exit.ip, '73.1.1.1');
 const uuidCheckerEnv = { ...unifiedEnv, CHECKER_TOKEN: '' };
 response = await handleRequest(request(checkerPath, { headers: { authorization: 'Bearer ' + uuidCheckerEnv.VLESS_UUID } }), uuidCheckerEnv);
