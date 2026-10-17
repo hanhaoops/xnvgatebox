@@ -25,6 +25,9 @@ type Manager struct {
 	localEvidence   map[string]Node
 	stateWriteHook  func(string) error
 	credentialApply func(*Tunnel) error
+	connectSem      chan struct{}
+	diagnostics     map[string]*diagnosticLease
+	console         *Console
 }
 
 func NewManager(maxSlots int, workDir string) *Manager {
@@ -34,6 +37,8 @@ func NewManager(maxSlots int, workDir string) *Manager {
 		maxSlots:      maxSlots,
 		deletedSlots:  map[int]bool{},
 		localEvidence: map[string]Node{},
+		connectSem:    make(chan struct{}, 2),
+		diagnostics:   map[string]*diagnosticLease{},
 	}
 }
 
@@ -326,10 +331,18 @@ func (m *Manager) tunnelActive(t *Tunnel) bool {
 
 // tryNode 尝试用当前节点把隧道拉起来。
 func (m *Manager) tryNode(t *Tunnel) error {
+	select {
+	case m.connectSem <- struct{}{}:
+		defer func() { <-m.connectSem }()
+	case <-t.workContext().Done():
+		return t.workContext().Err()
+	}
 	t.clearEgress()
+	t.probePhase("setup")
 	if err := t.setupNetns(); err != nil {
 		return err
 	}
+	t.probePhase("connecting")
 	if err := t.startOpenVPN(m.workDir); err != nil {
 		return err
 	}
@@ -338,6 +351,7 @@ func (m *Manager) tryNode(t *Tunnel) error {
 			return err
 		}
 	}
+	t.probePhase("baseline")
 	ip, err := t.probeExitIP()
 	if err != nil {
 		return err
@@ -348,6 +362,7 @@ func (m *Manager) tryNode(t *Tunnel) error {
 	t.mu.Lock()
 	t.ExitIP = ip
 	t.mu.Unlock()
+	t.probePhase("profile")
 	image := lookupOpenVPNEgressContext(t.workContext(), m.workDir, ip)
 	if !m.tunnelActive(t) {
 		return fmt.Errorf("画像查询期间 Slot 已停止")
@@ -357,6 +372,7 @@ func (m *Manager) tryNode(t *Tunnel) error {
 		return err
 	}
 	t.setValidating(true)
+	t.probePhase("verify_exit")
 	actual, latency, err := t.probeSocksExitIPWithLatency()
 	t.setValidating(false)
 	if err != nil {
@@ -469,6 +485,13 @@ func (m *Manager) Stop(slot int) error {
 // Delete is explicit: stopping reserves the Slot; deletion frees its identity.
 // Export retains a block tombstone until that Slot is deliberately recreated.
 func (m *Manager) Delete(slot int) error {
+	if m.console != nil {
+		return m.console.deleteSlot(slot)
+	}
+	return m.deleteSlot(slot)
+}
+
+func (m *Manager) deleteSlot(slot int) error {
 	m.mu.RLock()
 	t := m.tunnels[slot]
 	m.mu.RUnlock()
