@@ -2,11 +2,11 @@ package main
 
 import (
 	"encoding/base64"
+	"encoding/csv"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
-	"testing"
-	"time"
+	"sort"
+	"strconv"
+	"strings"
 )
 
 func sampleNodeCSV(host string) string {
@@ -17,89 +17,79 @@ func sampleNodeCSV(host string) string {
 		"*\n"
 }
 
-// 直连能用时不该碰反代。
-func TestFetchNodesUsesDirectWhenHealthy(t *testing.T) {
-	direct := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, sampleNodeCSV("direct-node"))
-	}))
-	defer direct.Close()
-	mirrorHit := false
-	mirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mirrorHit = true
-		fmt.Fprint(w, sampleNodeCSV("mirror-node"))
-	}))
-	defer mirror.Close()
+// parseNodeCSV 解析 VPN Gate 的 CSV。首行是 "*vpn_servers"，
+// 第二行是以 '#' 开头的表头，末行是 "*"。
+//
+// 这是测试专用代码：生产环境由 Pool Builder 负责拉取与解析节点列表，
+// fanout 只消费校验后的 node_pool.json（见 fetchNodes）。这里保留一份
+// 解析实现，仅供 nodepick 等测试用真实格式的 CSV 构造节点夹具。
+func parseNodeCSV(body string) ([]Node, error) {
+	var kept []string
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimRight(line, "\r")
+		if line == "" || strings.HasPrefix(line, "*") {
+			continue
+		}
+		kept = append(kept, strings.TrimPrefix(line, "#"))
+	}
+	if len(kept) < 2 {
+		return nil, fmt.Errorf("节点列表格式异常: 有效行不足")
+	}
 
-	t.Setenv("FANOUT_VPNGATE_MIRROR", mirror.URL)
-	nodes, err := fetchNodesWith(direct.URL, 5*time.Second)
+	r := csv.NewReader(strings.NewReader(strings.Join(kept, "\n")))
+	r.FieldsPerRecord = -1
+	records, err := r.ReadAll()
 	if err != nil {
-		t.Fatalf("直连应该成功: %v", err)
+		return nil, fmt.Errorf("解析节点 CSV 失败: %w", err)
 	}
-	if nodes[0].HostName != "direct-node" {
-		t.Fatalf("拿到的不是直连结果: %s", nodes[0].HostName)
-	}
-	if mirrorHit {
-		t.Fatal("直连成功时不应该请求反代")
-	}
-}
 
-// 直连被拦截时回落到反代，并带上访问密钥。
-func TestFetchNodesFallsBackToMirror(t *testing.T) {
-	direct := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "blocked", http.StatusForbidden)
-	}))
-	defer direct.Close()
-	gotKey := ""
-	mirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotKey = r.Header.Get("X-Fanout-Key")
-		fmt.Fprint(w, sampleNodeCSV("mirror-node"))
-	}))
-	defer mirror.Close()
+	header := records[0]
+	idx := map[string]int{}
+	for i, name := range header {
+		idx[strings.TrimSpace(name)] = i
+	}
+	need := []string{"HostName", "IP", "CountryLong", "CountryShort", "Ping", "Speed", "OpenVPN_ConfigData_Base64"}
+	for _, k := range need {
+		if _, ok := idx[k]; !ok {
+			return nil, fmt.Errorf("节点列表缺少字段 %s", k)
+		}
+	}
 
-	t.Setenv("FANOUT_VPNGATE_MIRROR", mirror.URL)
-	t.Setenv("FANOUT_VPNGATE_MIRROR_KEY", "test-key")
-	nodes, err := fetchNodesWith(direct.URL, 5*time.Second)
-	if err != nil {
-		t.Fatalf("反代应该兜住: %v", err)
+	var nodes []Node
+	for _, rec := range records[1:] {
+		get := func(k string) string {
+			i := idx[k]
+			if i >= len(rec) {
+				return ""
+			}
+			return rec[i]
+		}
+		cfgB64 := get("OpenVPN_ConfigData_Base64")
+		if cfgB64 == "" || get("HostName") == "" {
+			continue
+		}
+		cfg, err := base64.StdEncoding.DecodeString(cfgB64)
+		if err != nil {
+			continue
+		}
+		ping, _ := strconv.Atoi(get("Ping"))
+		speed, _ := strconv.ParseFloat(get("Speed"), 64)
+		sessions, _ := strconv.Atoi(get("NumVpnSessions"))
+		nodes = append(nodes, Node{
+			HostName:    get("HostName"),
+			IP:          get("IP"),
+			Residential: isResidential(get("HostName"), get("IP")),
+			Country:     get("CountryLong"),
+			CountryCode: get("CountryShort"),
+			Ping:        ping,
+			SpeedMbps:   speed / 1e6,
+			Sessions:    sessions,
+			Config:      string(cfg),
+		})
 	}
-	if nodes[0].HostName != "mirror-node" {
-		t.Fatalf("没走反代: %s", nodes[0].HostName)
+	if len(nodes) == 0 {
+		return nil, fmt.Errorf("节点列表为空")
 	}
-	if gotKey != "test-key" {
-		t.Fatalf("反代请求没带密钥: %q", gotKey)
-	}
-}
-
-// 直连返回 200 但内容是被劫持的门户页，也要回落。
-func TestFetchNodesFallsBackOnGarbageBody(t *testing.T) {
-	direct := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, "<html><body>请先登录网络</body></html>")
-	}))
-	defer direct.Close()
-	mirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, sampleNodeCSV("mirror-node"))
-	}))
-	defer mirror.Close()
-
-	t.Setenv("FANOUT_VPNGATE_MIRROR", mirror.URL)
-	nodes, err := fetchNodesWith(direct.URL, 5*time.Second)
-	if err != nil {
-		t.Fatalf("内容异常时应该回落: %v", err)
-	}
-	if nodes[0].HostName != "mirror-node" {
-		t.Fatalf("没走反代: %s", nodes[0].HostName)
-	}
-}
-
-// 反代被显式关掉时，直连失败就直接报错。
-func TestFetchNodesMirrorDisabled(t *testing.T) {
-	direct := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "blocked", http.StatusForbidden)
-	}))
-	defer direct.Close()
-
-	t.Setenv("FANOUT_VPNGATE_MIRROR", "")
-	if _, err := fetchNodesWith(direct.URL, 5*time.Second); err == nil {
-		t.Fatal("关掉反代后应该直接失败")
-	}
+	sort.Slice(nodes, func(i, j int) bool { return nodes[i].SpeedMbps > nodes[j].SpeedMbps })
+	return nodes, nil
 }
