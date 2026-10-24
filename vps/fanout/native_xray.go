@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -256,23 +255,6 @@ func toAnySlice(in []string) []any {
 		out = append(out, s)
 	}
 	return out
-}
-
-// writeXrayConfig 把配置写到磁盘，返回配置路径。
-func writeXrayConfig(dir string, cfg map[string]any) (string, error) {
-	blob, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return "", err
-	}
-	path := filepath.Join(dir, "xray.json")
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, blob, 0600); err != nil {
-		return "", err
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		return "", err
-	}
-	return path, nil
 }
 
 // verifyXrayConfig 用 xray 自己的校验器检查配置。

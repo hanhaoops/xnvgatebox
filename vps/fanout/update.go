@@ -1,17 +1,11 @@
 package main
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -85,25 +79,6 @@ func fetchLatestRelease() (*releaseInfo, error) {
 	return &rel, nil
 }
 
-// checkUpdate 比对当前版本与最新 release。
-func checkUpdate() (*UpdateStatus, error) {
-	rel, err := fetchLatestRelease()
-	if err != nil {
-		return nil, err
-	}
-	cur := strings.TrimSpace(version)
-	latest := strings.TrimSpace(rel.TagName)
-	st := &UpdateStatus{
-		Current:   cur,
-		Latest:    latest,
-		Notes:     strings.TrimSpace(rel.Body),
-		URL:       rel.HTMLURL,
-		HasUpdate: versionLess(cur, latest),
-		Supported: releaseHasPackage(rel),
-	}
-	return st, nil
-}
-
 // versionLess 判断 cur 是否比 latest 旧。解析 vX.Y.Z 做数值比较；
 // dev 或无法解析时保守认为"有更新"（让用户能装上正式版）。
 func versionLess(cur, latest string) bool {
@@ -145,67 +120,4 @@ func parseSemver(v string) ([3]int, bool) {
 		out[i] = n
 	}
 	return out, true
-}
-
-func sha256FromList(listPath, name string) (string, error) {
-	blob, err := os.ReadFile(listPath)
-	if err != nil {
-		return "", err
-	}
-	for _, line := range strings.Split(string(blob), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) == 2 && strings.TrimPrefix(fields[1], "*") == name {
-			return fields[0], nil
-		}
-	}
-	return "", fmt.Errorf("校验和列表里没有 %s", name)
-}
-
-func sha256File(path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
-}
-
-// extractBinary 从 tar.gz 里取出指定文件名的成员写到 dst。
-func extractBinary(tarGz, member, dst string) error {
-	f, err := os.Open(tarGz)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	gz, err := gzip.NewReader(f)
-	if err != nil {
-		return err
-	}
-	defer gz.Close()
-	tr := tar.NewReader(gz)
-	for {
-		hd, err := tr.Next()
-		if err == io.EOF {
-			return fmt.Errorf("包里没有 %s", member)
-		}
-		if err != nil {
-			return err
-		}
-		if filepath.Base(hd.Name) != member {
-			continue
-		}
-		out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
-		if err != nil {
-			return err
-		}
-		defer out.Close()
-		if _, err := io.Copy(out, tr); err != nil {
-			return err
-		}
-		return nil
-	}
 }
