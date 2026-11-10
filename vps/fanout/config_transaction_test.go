@@ -63,7 +63,11 @@ func rollbackFixture(t *testing.T) (*Native, *faultNativeRuntime, []*Tunnel) {
 		t.Fatal(err)
 	}
 	tunnels := []*Tunnel{{Slot: 1, Port: 17928, Status: "up", Node: Node{HostName: "a"}, Cred: SocksCred{User: "fixture-user", Pass: "fixture-pass"}}}
-	if _, err := writeXrayConfig(dir, buildXrayConfig(store.sorted(), tunnels)); err != nil {
+	blob, err := json.MarshalIndent(buildXrayConfig(store.sorted(), tunnels), "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicConfigWrite(filepath.Join(dir, "xray.json"), blob); err != nil {
 		t.Fatal(err)
 	}
 	runtime := &faultNativeRuntime{running: true}

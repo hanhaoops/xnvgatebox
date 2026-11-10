@@ -13,3 +13,4 @@ public/
 tools/bin/
 dist/
 build/
+*.ovpn

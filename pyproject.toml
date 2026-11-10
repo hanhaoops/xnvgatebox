@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vpngate-toolbox"
-version = "0.1.0"
-description = "Shared VPN Gate pool builder and verified Cloudflare VLESS pipeline"
+version = "0.9.6"
+description = "Shared VPN Gate pool builder for the xnvgatebox VPS deployment"
 requires-python = ">=3.9"
 license = {text = "GPL-3.0-only"}
 
